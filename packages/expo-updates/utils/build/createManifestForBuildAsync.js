@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createManifestForBuildAsync = void 0;
+exports.createManifestForBuildAsync = createManifestForBuildAsync;
 const exportEmbedAsync_1 = require("@expo/cli/build/src/export/embed/exportEmbedAsync");
 const metroAssetLocalPath_1 = require("@expo/cli/build/src/export/metroAssetLocalPath");
 const paths_1 = require("@expo/config/paths");
@@ -11,28 +11,21 @@ const crypto_1 = __importDefault(require("crypto"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const filterPlatformAssetScales_1 = require("./filterPlatformAssetScales");
-async function createManifestForBuildAsync(platform, possibleProjectRoot, destinationDir, entryFileArg) {
-    const entryFile = entryFileArg ||
+async function createManifestForBuildAsync(platform, projectRoot, destinationDir, entryFileArg) {
+    let entryFile = entryFileArg ||
         process.env.ENTRY_FILE ||
-        getRelativeEntryPoint(possibleProjectRoot, platform) ||
+        (0, paths_1.resolveRelativeEntryPoint)(projectRoot, { platform }) ||
         'index.js';
-    // Remove projectRoot validation when we no longer support React Native <= 62
-    let projectRoot;
-    if (fs_1.default.existsSync(path_1.default.join(possibleProjectRoot, entryFile))) {
-        projectRoot = path_1.default.resolve(possibleProjectRoot);
-    }
-    else if (fs_1.default.existsSync(path_1.default.join(possibleProjectRoot, '..', entryFile))) {
-        projectRoot = path_1.default.resolve(possibleProjectRoot, '..');
-    }
-    else {
-        throw new Error('Error loading application entry point. If your entry point is not index.js, please set ENTRY_FILE environment variable with your app entry point.');
+    // Android uses absolute paths for the entry file, so we need to convert that to a relative path.
+    if (path_1.default.isAbsolute(entryFile)) {
+        entryFile = (0, paths_1.convertEntryPointToRelative)(projectRoot, entryFile);
     }
     process.chdir(projectRoot);
     const options = {
         platform,
         entryFile,
         minify: false,
-        dev: false,
+        dev: process.env.CONFIGURATION === 'Debug', // ensures debug assets packaged correctly for iOS and native debug
         sourcemapUseAbsolutePath: false,
     };
     const { server, bundleRequest } = (await (0, exportEmbedAsync_1.createMetroServerAndBundleRequestAsync)(projectRoot, options));
@@ -82,17 +75,6 @@ async function createManifestForBuildAsync(platform, possibleProjectRoot, destin
         });
     });
     fs_1.default.writeFileSync(path_1.default.join(destinationDir, 'app.manifest'), JSON.stringify(manifest));
-}
-exports.createManifestForBuildAsync = createManifestForBuildAsync;
-/**
- * Resolve the relative entry file using Expo's resolution method.
- */
-function getRelativeEntryPoint(projectRoot, platform) {
-    const entry = (0, paths_1.resolveEntryPoint)(projectRoot, { platform });
-    if (entry) {
-        return path_1.default.relative(projectRoot, entry);
-    }
-    return entry;
 }
 function getAndroidResourceFolderName(asset) {
     return metroAssetLocalPath_1.drawableFileTypes.has(asset.type) ? 'drawable' : 'raw';

@@ -1,48 +1,104 @@
 import { getActionFromState, LinkingOptions } from '@react-navigation/native';
+import { Platform } from 'expo-modules-core';
 
 import { RouteNode } from './Route';
-import { State } from './fork/getPathFromState';
-import { getReactNavigationConfig, Screen } from './getReactNavigationConfig';
-import {
-  addEventListener,
-  getInitialURL,
-  getPathFromState,
-  getStateFromPath,
-} from './link/linking';
+import { INTERNAL_SLOT_NAME } from './constants';
+import { Options, State } from './fork/getPathFromState';
+import { getReactNavigationConfig } from './getReactNavigationConfig';
+import { applyRedirects } from './getRoutesRedirects';
+import { UrlObject } from './global-state/routeInfo';
+import type { StoreRedirects } from './global-state/router-store';
+import { getInitialURL, getPathFromState, getStateFromPath, subscribe } from './link/linking';
+import { NativeIntent, RequireContext } from './types';
 
-export function getNavigationConfig(
-  routes: RouteNode,
-  metaOnly: boolean = true
-): {
-  initialRouteName?: string;
-  screens: Record<string, Screen>;
-} {
-  return getReactNavigationConfig(routes, metaOnly);
+export function getNavigationConfig(routes: RouteNode, metaOnly: boolean = true) {
+  return {
+    screens: {
+      [INTERNAL_SLOT_NAME]: {
+        path: '',
+        ...getReactNavigationConfig(routes, metaOnly),
+      },
+    },
+  };
 }
 
-export type ExpoLinkingOptions = LinkingOptions<object> & {
-  getPathFromState?: typeof getPathFromState;
+export type ExpoLinkingOptions<T extends object = Record<string, unknown>> = LinkingOptions<T> & {
+  getPathFromState: typeof getPathFromState;
+  getStateFromPath: typeof getStateFromPath;
 };
 
-export function getLinkingConfig(routes: RouteNode, metaOnly: boolean = true): ExpoLinkingOptions {
+export type LinkingConfigOptions = {
+  metaOnly?: boolean;
+  serverUrl?: string;
+  getInitialURL?: typeof getInitialURL;
+  redirects?: StoreRedirects[];
+};
+
+export function getLinkingConfig(
+  routes: RouteNode,
+  context: RequireContext,
+  getRouteInfo: () => UrlObject,
+  { metaOnly = true, serverUrl, redirects }: LinkingConfigOptions = {}
+): ExpoLinkingOptions {
+  // Returning `undefined` / `null from `getInitialURL` are valid values, so we need to track if it's been called.
+  let hasCachedInitialUrl = false;
+  let initialUrl: ReturnType<typeof getInitialURL> | undefined;
+
+  const nativeLinkingKey = context
+    .keys()
+    .find((key) => key.match(/^\.\/\+native-intent\.[tj]sx?$/));
+  const nativeLinking: NativeIntent | undefined = nativeLinkingKey
+    ? context(nativeLinkingKey)
+    : undefined;
+
+  const config = getNavigationConfig(routes, metaOnly);
+
   return {
     prefixes: [],
-    // @ts-expect-error
-    config: getNavigationConfig(routes, metaOnly),
+    config,
     // A custom getInitialURL is used on native to ensure the app always starts at
     // the root path if it's launched from something other than a deep link.
     // This helps keep the native functionality working like the web functionality.
     // For example, if you had a root navigator where the first screen was `/settings` and the second was `/index`
     // then `/index` would be used on web and `/settings` would be used on native.
-    getInitialURL,
-    subscribe: addEventListener,
-    getStateFromPath: getStateFromPathMemoized,
+    getInitialURL() {
+      // Expo Router calls `getInitialURL` twice, which may confuse the user if they provide a custom `getInitialURL`.
+      // Therefor we memoize the result.
+      if (!hasCachedInitialUrl) {
+        if (Platform.OS === 'web') {
+          initialUrl = serverUrl ?? getInitialURL();
+        } else {
+          initialUrl = serverUrl ?? getInitialURL();
+
+          if (typeof initialUrl === 'string') {
+            initialUrl = applyRedirects(initialUrl, redirects);
+            if (initialUrl && typeof nativeLinking?.redirectSystemPath === 'function') {
+              initialUrl = nativeLinking.redirectSystemPath({ path: initialUrl, initial: true });
+            }
+          } else if (initialUrl) {
+            initialUrl = initialUrl.then((url) => {
+              url = applyRedirects(url, redirects);
+              if (url && typeof nativeLinking?.redirectSystemPath === 'function') {
+                return nativeLinking.redirectSystemPath({ path: url, initial: true });
+              }
+              return url;
+            });
+          }
+        }
+        hasCachedInitialUrl = true;
+      }
+      return initialUrl;
+    },
+    subscribe: subscribe(nativeLinking, redirects),
+    getStateFromPath: <ParamList extends object>(path: string, options?: Options<ParamList>) => {
+      return getStateFromPath(path, options, getRouteInfo().segments);
+    },
     getPathFromState(state: State, options: Parameters<typeof getPathFromState>[1]) {
       return (
         getPathFromState(state, {
-          screens: [],
-          ...this.config,
+          ...config,
           ...options,
+          screens: config.screens ?? options?.screens ?? {},
         }) ?? '/'
       );
     },
@@ -50,17 +106,4 @@ export function getLinkingConfig(routes: RouteNode, metaOnly: boolean = true): E
     // This is a convenience for usage in the package.
     getActionFromState,
   };
-}
-
-export const stateCache = new Map<string, any>();
-
-/** We can reduce work by memoizing the state by the pathname. This only works because the options (linking config) theoretically never change.  */
-function getStateFromPathMemoized(path: string, options: Parameters<typeof getStateFromPath>[1]) {
-  const cached = stateCache.get(path);
-  if (cached) {
-    return cached;
-  }
-  const result = getStateFromPath(path, options);
-  stateCache.set(path, result);
-  return result;
 }

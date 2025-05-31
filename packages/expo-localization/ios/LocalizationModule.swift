@@ -6,45 +6,50 @@ import ExpoModulesCore
 let LOCALE_SETTINGS_CHANGED = "onLocaleSettingsChanged"
 let CALENDAR_SETTINGS_CHANGED = "onCalendarSettingsChanged"
 
+let OBSERVED_EVENTS: Set<Notification.Name> = [
+  // swiftlint:disable legacy_objc_type
+  UIApplication.significantTimeChangeNotification,
+  NSLocale.currentLocaleDidChangeNotification
+  // swiftlint:enable legacy_objc_type
+]
+
 public class LocalizationModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ExpoLocalization")
 
-    Constants {
-      return Self.getCurrentLocalization()
-    }
-    AsyncFunction("getLocalizationAsync") {
-      return Self.getCurrentLocalization()
-    }
-    Function("getLocales") {
-      return Self.getLocales()
-    }
-    Function("getCalendars") {
-      return Self.getCalendars()
-    }
+    Function("getLocales", Self.getLocales)
+    Function("getCalendars", Self.getCalendars)
     OnCreate {
-      if let enableRTL = Bundle.main.object(forInfoDictionaryKey: "ExpoLocalization_supportsRTL") as? Bool {
-        self.setSupportsRTL(enableRTL)
+      if let forceRTL = Bundle.main.object(forInfoDictionaryKey: "ExpoLocalization_forcesRTL") as? Bool {
+        self.setRTLPreferences(true, forceRTL)
+      } else {
+        if let enableRTL = Bundle.main.object(forInfoDictionaryKey: "ExpoLocalization_supportsRTL") as? Bool {
+          self.setRTLPreferences(enableRTL, false)
+        }
       }
     }
 
     Events(LOCALE_SETTINGS_CHANGED, CALENDAR_SETTINGS_CHANGED)
 
     OnStartObserving {
-      NotificationCenter.default.addObserver(
-        self,
-        selector: #selector(LocalizationModule.localeChanged),
-        name: NSLocale.currentLocaleDidChangeNotification, // swiftlint:disable:this legacy_objc_type
-        object: nil
-      )
+      OBSERVED_EVENTS.forEach {
+        NotificationCenter.default.addObserver(
+          self,
+          selector: #selector(LocalizationModule.localeChanged),
+          name: $0,
+          object: nil
+        )
+      }
     }
 
     OnStopObserving {
-      NotificationCenter.default.removeObserver(
-        self,
-        name: NSLocale.currentLocaleDidChangeNotification, // swiftlint:disable:this legacy_objc_type
-        object: nil
-      )
+      OBSERVED_EVENTS.forEach {
+        NotificationCenter.default.removeObserver(
+          self,
+          name: $0,
+          object: nil
+        )
+      }
     }
   }
 
@@ -53,13 +58,20 @@ public class LocalizationModule: Module {
     return NSLocale.characterDirection(forLanguage: NSLocale.preferredLanguages.first ?? "en-US") == NSLocale.LanguageDirection.rightToLeft
   }
 
-  func setSupportsRTL(_ supportsRTL: Bool) {
+  func setRTLPreferences(_ supportsRTL: Bool, _ forceRTL: Bool) {
     // These keys are used by React Native here: https://github.com/facebook/react-native/blob/main/React/Modules/RCTI18nUtil.m
     // We set them before React loads to ensure it gets rendered correctly the first time the app is opened.
     // On iOS we need to set both forceRTL and allowRTL so apps don't have to include localization strings.
     // Uses required reason API based on the following reason: CA92.1
-    UserDefaults.standard.set(supportsRTL, forKey: "RCTI18nUtil_allowRTL")
-    UserDefaults.standard.set(supportsRTL ? isRTLPreferredForCurrentLocale() : false, forKey: "RCTI18nUtil_forceRTL")
+
+    if forceRTL {
+      UserDefaults.standard.set(true, forKey: "RCTI18nUtil_allowRTL")
+      UserDefaults.standard.set(true, forKey: "RCTI18nUtil_forceRTL")
+    } else {
+      UserDefaults.standard.set(supportsRTL, forKey: "RCTI18nUtil_allowRTL")
+      UserDefaults.standard.set(supportsRTL ? isRTLPreferredForCurrentLocale() : false, forKey: "RCTI18nUtil_forceRTL")
+    }
+
     UserDefaults.standard.synchronize()
   }
 
@@ -112,6 +124,9 @@ public class LocalizationModule: Module {
       return "roc"
     case .iso8601:
       return "iso8601"
+    @unknown default:
+      log.error("Unhandled `Calendar.Identifier` value: \(calendar.identifier), returning `iso8601` as fallback. Add the missing case as soon as possible.")
+      return "iso8601"
     }
   }
 
@@ -138,26 +153,34 @@ public class LocalizationModule: Module {
           return [
             "languageTag": languageTag,
             "languageCode": languageLocale.language.languageCode?.identifier,
-            "regionCode": languageLocale.region?.identifier,
+            "languageScriptCode": languageLocale.language.script?.identifier,
+            "languageRegionCode": languageLocale.region?.identifier,
+            "regionCode": userSettingsLocale.region?.identifier,
             "textDirection": languageLocale.language.characterDirection == .rightToLeft ? "rtl" : "ltr",
             "decimalSeparator": userSettingsLocale.decimalSeparator,
             "digitGroupingSeparator": userSettingsLocale.groupingSeparator,
             "measurementSystem": getMeasurementSystemForLocale(userSettingsLocale),
-            "currencyCode": languageLocale.currencyCode,
-            "currencySymbol": languageLocale.currencySymbol,
+            "currencyCode": userSettingsLocale.currencyCode,
+            "currencySymbol": userSettingsLocale.currencySymbol,
+            "languageCurrencyCode": languageLocale.currencyCode,
+            "languageCurrencySymbol": languageLocale.currencySymbol,
             "temperatureUnit": getTemperatureUnit()
           ]
         }
         return [
           "languageTag": languageTag,
           "languageCode": languageLocale.languageCode,
-          "regionCode": languageLocale.regionCode,
+          "languageScriptCode": languageLocale.scriptCode,
+          "languageRegionCode": languageLocale.regionCode,
+          "regionCode": userSettingsLocale.regionCode,
           "textDirection": Locale.characterDirection(forLanguage: languageTag) == .rightToLeft ? "rtl" : "ltr",
           "decimalSeparator": userSettingsLocale.decimalSeparator,
           "digitGroupingSeparator": userSettingsLocale.groupingSeparator,
           "measurementSystem": getMeasurementSystemForLocale(userSettingsLocale),
-          "currencyCode": languageLocale.currencyCode,
-          "currencySymbol": languageLocale.currencySymbol,
+          "currencyCode": userSettingsLocale.currencyCode,
+          "currencySymbol": userSettingsLocale.currencySymbol,
+          "languageCurrencyCode": languageLocale.currencyCode,
+          "languageCurrencySymbol": languageLocale.currencySymbol,
           "temperatureUnit": getTemperatureUnit()
         ]
       }
@@ -192,7 +215,7 @@ public class LocalizationModule: Module {
   }
 
   static func getCalendars() -> [[String: Any?]] {
-    var calendar = Locale.current.calendar
+    let calendar = Locale.current.calendar
     return [
       [
         "calendar": getUnicodeCalendarIdentifier(calendar: calendar),
@@ -200,28 +223,6 @@ public class LocalizationModule: Module {
         "uses24hourClock": uses24HourClock(),
         "firstWeekday": calendar.firstWeekday
       ]
-    ]
-  }
-
-  static func getCurrentLocalization() -> [String: Any?] {
-    let locale = getLocale()
-    let languageCode = locale.languageCode ?? "en"
-    var languageIds = Locale.preferredLanguages
-
-    if languageIds.isEmpty {
-      languageIds.append("en-US")
-    }
-    return [
-      "currency": locale.currencyCode ?? "USD",
-      "decimalSeparator": locale.decimalSeparator ?? ".",
-      "digitGroupingSeparator": locale.groupingSeparator ?? ",",
-      "isoCurrencyCodes": Locale.isoCurrencyCodes,
-      "isMetric": locale.usesMetricSystem,
-      "isRTL": Locale.characterDirection(forLanguage: languageCode) == .rightToLeft,
-      "locale": languageIds.first,
-      "locales": languageIds,
-      "region": locale.regionCode ?? "US",
-      "timezone": TimeZone.current.identifier
     ]
   }
 }

@@ -3,7 +3,7 @@ package host.exp.exponent.experience.splashscreen
 import android.graphics.Color
 import androidx.annotation.ColorInt
 import expo.modules.jsonutils.getNullable
-import expo.modules.splashscreen.SplashScreenImageResizeMode
+import host.exp.exponent.experience.splashscreen.legacy.SplashScreenImageResizeMode
 import expo.modules.manifests.core.Manifest
 import host.exp.exponent.ExponentManifest
 import host.exp.exponent.utils.ColorParser
@@ -18,6 +18,8 @@ class ManagedAppSplashScreenConfiguration private constructor() {
     private set
   var imageUrl: String? = null
     private set
+  var appName: String? = null
+    private set
 
   companion object {
     @JvmStatic
@@ -25,15 +27,19 @@ class ManagedAppSplashScreenConfiguration private constructor() {
       val mode: SplashScreenImageResizeMode? = parseResizeMode(manifest)
       val backgroundColor = parseBackgroundColor(manifest)
       val imageUrl = parseImageUrl(manifest)
+      val name = manifest.getName()
       val config = ManagedAppSplashScreenConfiguration()
-      if (mode != null) {
-        config.resizeMode = mode
+      mode?.let {
+        config.resizeMode = it
       }
-      if (backgroundColor != null) {
-        config.backgroundColor = backgroundColor
+      backgroundColor?.let {
+        config.backgroundColor = it
       }
-      if (imageUrl != null) {
-        config.imageUrl = imageUrl
+      imageUrl?.let {
+        config.imageUrl = it
+      }
+      name?.let {
+        config.appName = it
       }
       return config
     }
@@ -66,6 +72,12 @@ class ManagedAppSplashScreenConfiguration private constructor() {
      * - generic splash imageUrl
      */
     private fun parseImageUrl(manifest: Manifest): String? {
+      // Because of the changes to splashscreen we are going to default to the app icon in expo go
+      val iconUrl = manifest.getIconUrl()
+      if (iconUrl != null) {
+        return iconUrl
+      }
+
       val androidSplash = manifest.getAndroidSplashInfo()
       if (androidSplash != null) {
         val dpiRelatedImageUrl = getStringFromJSONObject(

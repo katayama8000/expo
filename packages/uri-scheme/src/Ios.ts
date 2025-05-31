@@ -4,7 +4,7 @@ import plist from '@expo/plist';
 import spawnAsync from '@expo/spawn-async';
 import chalk from 'chalk';
 import fs from 'fs';
-import { sync as globSync } from 'glob';
+import { globSync } from 'glob';
 import * as path from 'path';
 
 import { CommandError, Options } from './Options';
@@ -136,4 +136,24 @@ function formatConfig(plistObject: any): string {
 
 function writeConfig(path: string, plistObject: any) {
   fs.writeFileSync(path, formatConfig(plistObject));
+}
+
+/**
+ * `xcrun` expects special characters in the search parameters to be escaped.
+ * When you don't escape these special characters, the wrong screen might be opened without warnings.
+ *
+ * @example
+ * - `myapp://(tabs)/explore` -> `myapp://(tabs)/explore`
+ * - `myapp://(tabs)/explore?test=a|b|c` -> `myapp://(tabs)/explore?test=a%257Cb%257Cc`
+ */
+export function escapeUri(uri: string) {
+  if (!uri.includes('?')) return uri;
+
+  const [uriWithoutParams, uriParams] = uri.split('?', 2);
+  const escapedUriParams = new URLSearchParams(uriParams);
+  for (const [key, value] of escapedUriParams.entries()) {
+    escapedUriParams.set(key, encodeURIComponent(decodeURIComponent(value)));
+  }
+
+  return `${uriWithoutParams}?${escapedUriParams.toString()}`;
 }

@@ -1,3 +1,6 @@
-import { AudioPlayer } from './AudioModule.types';
-export declare function useAudioPlayer(source?: string | null): AudioPlayer;
+export { PermissionResponse, PermissionExpiration, PermissionStatus } from 'expo-modules-core';
+export * from './ExpoAudio';
+export * from './Audio.types';
+export * from './AudioModule.types';
+export * from './RecordingConstants';
 //# sourceMappingURL=index.d.ts.map

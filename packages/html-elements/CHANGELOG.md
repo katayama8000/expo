@@ -10,6 +10,60 @@
 
 ### 💡 Others
 
+## 0.12.5 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 0.12.4 — 2025-04-25
+
+_This version does not introduce any user-facing changes._
+
+## 0.12.3 — 2025-04-22
+
+### 🛠 Breaking changes
+
+- Upgrade to React 19 and remove compiled build code. ([#36273](https://github.com/expo/expo/pull/36273) by [@EvanBacon](https://github.com/EvanBacon))
+
+### 💡 Others
+
+- Switch web testing to `@testing-library/react`. ([#36293](https://github.com/expo/expo/pull/36293) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 0.12.2 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.12.1 — 2025-04-09
+
+_This version does not introduce any user-facing changes._
+
+## 0.12.0 — 2025-04-04
+
+_This version does not introduce any user-facing changes._
+
+## 0.11.2 - 2025-01-19
+
+### 🐛 Bug fixes
+
+- change type of `outlineColor` to `ColorValue` to support react-native 0.77 ([#33946](https://github.com/expo/expo/pull/33946) by [@vonovak](https://github.com/vonovak))
+
+## 0.11.1 - 2025-01-10
+
+_This version does not introduce any user-facing changes._
+
+## 0.11.0 — 2024-10-22
+
+### ⚠️ Notices
+
+- Added support for React Native 0.76.x. ([#31552](https://github.com/expo/expo/pull/31552) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+## 0.10.1 — 2024-04-23
+
+_This version does not introduce any user-facing changes._
+
+## 0.10.0 — 2024-04-18
+
+_This version does not introduce any user-facing changes._
+
 ## 0.9.1 — 2023-12-15
 
 _This version does not introduce any user-facing changes._

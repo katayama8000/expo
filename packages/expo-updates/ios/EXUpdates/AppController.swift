@@ -6,9 +6,39 @@
 
 import Foundation
 import ExpoModulesCore
+import EXUpdatesInterface
 
 public struct UpdatesModuleConstants {
+  public init(
+    launchedUpdate: Update?,
+    launchDuration: Double?,
+    embeddedUpdate: Update?,
+    emergencyLaunchException: Error?,
+    isEnabled: Bool,
+    isUsingEmbeddedAssets: Bool,
+    runtimeVersion: String?,
+    checkOnLaunch: CheckAutomaticallyConfig,
+    requestHeaders: [String: String],
+    assetFilesMap: [String: Any]?,
+    shouldDeferToNativeForAPIMethodAvailabilityInDevelopment: Bool,
+    initialContext: UpdatesStateContext
+  ) {
+    self.launchedUpdate = launchedUpdate
+    self.launchDuration = launchDuration
+    self.embeddedUpdate = embeddedUpdate
+    self.emergencyLaunchException = emergencyLaunchException
+    self.isEnabled = isEnabled
+    self.isUsingEmbeddedAssets = isUsingEmbeddedAssets
+    self.runtimeVersion = runtimeVersion
+    self.checkOnLaunch = checkOnLaunch
+    self.requestHeaders = requestHeaders
+    self.assetFilesMap = assetFilesMap
+    self.shouldDeferToNativeForAPIMethodAvailabilityInDevelopment = shouldDeferToNativeForAPIMethodAvailabilityInDevelopment
+    self.initialContext = initialContext
+  }
+
   let launchedUpdate: Update?
+  let launchDuration: Double?
   let embeddedUpdate: Update?
   let emergencyLaunchException: Error?
   let isEnabled: Bool
@@ -33,6 +63,37 @@ public struct UpdatesModuleConstants {
    calls to go through.
    */
   let shouldDeferToNativeForAPIMethodAvailabilityInDevelopment: Bool
+
+  let initialContext: UpdatesStateContext
+
+  public func toModuleConstantsMap() -> [String: Any?] {
+    var mutableMap: [String: Any?] = [
+      "isEmergencyLaunch": emergencyLaunchException != nil,
+      "emergencyLaunchReason": emergencyLaunchException?.localizedDescription,
+      "isEmbeddedLaunch": embeddedUpdate != nil && embeddedUpdate?.updateId == launchedUpdate?.updateId,
+      "isEnabled": isEnabled,
+      "launchDuration": launchDuration,
+      "isUsingEmbeddedAssets": isUsingEmbeddedAssets,
+      "runtimeVersion": runtimeVersion ?? "",
+      "checkAutomatically": checkOnLaunch.asString,
+      "channel": requestHeaders["expo-channel-name"] ?? "",
+      "shouldDeferToNativeForAPIMethodAvailabilityInDevelopment":
+        shouldDeferToNativeForAPIMethodAvailabilityInDevelopment || UpdatesUtils.isNativeDebuggingEnabled(),
+      "initialContext": initialContext.json
+    ]
+
+    if let launchedUpdate = launchedUpdate {
+      mutableMap["updateId"] = launchedUpdate.updateId.uuidString
+      mutableMap["commitTime"] = UInt64(floor(launchedUpdate.commitTime.timeIntervalSince1970 * 1000))
+      mutableMap["manifest"] = launchedUpdate.manifest.rawManifestJSON()
+    }
+
+    if let assetFilesMap = assetFilesMap {
+      mutableMap["localAssets"] = assetFilesMap
+    }
+
+    return mutableMap
+  }
 }
 
 public enum CheckForUpdateResult {
@@ -64,7 +125,11 @@ public protocol AppControllerInterface {
    */
   @objc func launchAssetUrl() -> URL?
 
-  @objc var isStarted: Bool { get }
+  /**
+   Indicates that the controller is in active state.
+   Currently it's only active for `EnabledAppController`.
+   */
+  @objc var isActiveController: Bool { get }
 
   /**
    Starts the update process to launch a previously-loaded update and (if configured to do so)
@@ -79,15 +144,10 @@ public protocol AppControllerInterface {
 }
 
 public protocol InternalAppControllerInterface: AppControllerInterface {
-  /**
-   The AppContext from expo-modules-core.
-   This is optional, but required for expo-updates module events to work.
-   */
-  var appContext: AppContext? { get set }
-
   var updatesDirectory: URL? { get }
 
-  var shouldEmitJsEvents: Bool { get set }
+  var eventManager: UpdatesEventManager { get }
+  func onEventListenerStartObserving()
 
   func getConstantsForModule() -> UpdatesModuleConstants
   func requestRelaunch(
@@ -112,10 +172,7 @@ public protocol InternalAppControllerInterface: AppControllerInterface {
     success successBlockArg: @escaping () -> Void,
     error errorBlockArg: @escaping (_ error: Exception) -> Void
   )
-  func getNativeStateMachineContext(
-    success successBlockArg: @escaping (_ stateMachineContext: UpdatesStateContext) -> Void,
-    error errorBlockArg: @escaping (_ error: Exception) -> Void
-  )
+  func setUpdateURLAndRequestHeadersOverride(_ configOverride: UpdatesConfigOverride?) throws
 }
 
 @objc(EXUpdatesAppControllerDelegate)
@@ -150,6 +207,19 @@ public class AppController: NSObject {
 
   public static func initializeWithoutStarting() {
     if _sharedInstance != nil {
+      return
+    }
+
+    if EXAppDefines.APP_DEBUG && !UpdatesUtils.isNativeDebuggingEnabled() {
+      #if USE_DEV_CLIENT
+      // Passing a reference to DevLauncherController over to the registry,
+      // which expo-dev-client can access.
+      let devLauncherController = initializeAsDevLauncherWithoutStarting()
+      _sharedInstance = devLauncherController
+      UpdatesControllerRegistry.sharedInstance.controller = devLauncherController
+      #else
+      _sharedInstance = DisabledAppController(error: nil)
+      #endif
       return
     }
 
@@ -198,14 +268,15 @@ public class AppController: NSObject {
       let updatesDatabase = UpdatesDatabase()
       do {
         let directory = try initializeUpdatesDirectory()
-        try initializeUpdatesDatabase(updatesDatabase: updatesDatabase, inUpdatesDirectory: directory)
+        try initializeUpdatesDatabase(updatesDatabase: updatesDatabase, inUpdatesDirectory: directory, logger: logger)
         _sharedInstance = EnabledAppController(config: config, database: updatesDatabase, updatesDirectory: directory)
       } catch {
+        let cause = UpdatesError.appControllerInitializationError(cause: error)
         logger.error(
-          message: "The expo-updates system is disabled due to an error during initialization: \(error.localizedDescription)",
+          cause: cause,
           code: .initializationError
         )
-        _sharedInstance = DisabledAppController(error: error)
+        _sharedInstance = DisabledAppController(error: cause)
         return
       }
     } else {
@@ -229,7 +300,7 @@ public class AppController: NSObject {
     }
   }
 
-  public static func initializeAsDevLauncherWithoutStarting() -> DevLauncherAppController {
+  private static func initializeAsDevLauncherWithoutStarting() -> DevLauncherAppController {
     assert(_sharedInstance == nil, "UpdatesController must not be initialized prior to calling initializeAsDevLauncherWithoutStarting")
 
     var config: UpdatesConfig?
@@ -237,12 +308,14 @@ public class AppController: NSObject {
       config = try? UpdatesConfig.configWithExpoPlist(mergingOtherDictionary: nil)
     }
 
+    let logger = UpdatesLogger()
+
     var updatesDirectory: URL?
     let updatesDatabase = UpdatesDatabase()
     var directoryDatabaseException: Error?
     do {
       updatesDirectory = try initializeUpdatesDirectory()
-      try initializeUpdatesDatabase(updatesDatabase: updatesDatabase, inUpdatesDirectory: updatesDirectory!)
+      try initializeUpdatesDatabase(updatesDatabase: updatesDatabase, inUpdatesDirectory: updatesDirectory!, logger: logger)
     } catch {
       directoryDatabaseException = error
     }
@@ -261,12 +334,12 @@ public class AppController: NSObject {
     return try UpdatesUtils.initializeUpdatesDirectory()
   }
 
-  private static func initializeUpdatesDatabase(updatesDatabase: UpdatesDatabase, inUpdatesDirectory updatesDirectory: URL) throws {
+  private static func initializeUpdatesDatabase(updatesDatabase: UpdatesDatabase, inUpdatesDirectory updatesDirectory: URL, logger: UpdatesLogger) throws {
     var dbError: Error?
     let semaphore = DispatchSemaphore(value: 0)
     updatesDatabase.databaseQueue.async {
       do {
-        try updatesDatabase.openDatabase(inDirectory: updatesDirectory)
+        try updatesDatabase.openDatabase(inDirectory: updatesDirectory, logger: logger)
       } catch {
         dbError = error
       }
@@ -280,19 +353,13 @@ public class AppController: NSObject {
     }
   }
 
-  /**
-   For `UpdatesModule` to set the `shouldEmitJsEvents` property
-   */
-  internal static var shouldEmitJsEvents: Bool {
-    get { _sharedInstance?.shouldEmitJsEvents ?? false }
-    set { _sharedInstance?.shouldEmitJsEvents = newValue }
+  internal static func setUpdatesEventManagerObserver(_ observer: UpdatesEventManagerObserver) {
+    _sharedInstance?.eventManager.observer = observer
+    _sharedInstance?.onEventListenerStartObserving()
   }
 
-  /**
-   Binds the `AppContext` instance from `UpdatesModule`.
-   */
-  internal static func bindAppContext(_ appContext: AppContext?) {
-    _sharedInstance?.appContext = appContext
+  internal static func removeUpdatesEventManagerObserver() {
+    _sharedInstance?.eventManager.observer = nil
   }
 }
 

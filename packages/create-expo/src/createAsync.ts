@@ -6,6 +6,8 @@ import path from 'path';
 import {
   downloadAndExtractExampleAsync,
   ensureExampleExists,
+  ExamplesMetadata,
+  fetchMetadataAsync,
   promptExamplesAsync,
 } from './Examples';
 import * as Template from './Template';
@@ -16,6 +18,7 @@ import {
   installDependenciesAsync,
   PackageManagerName,
   resolvePackageManager,
+  formatSelfCommand,
 } from './resolvePackageManager';
 import { assertFolderEmpty, assertValidName, resolveProjectRootAsync } from './resolveProjectRoot';
 import {
@@ -53,9 +56,13 @@ async function resolveProjectRootArgAsync(
 }
 
 async function setupDependenciesAsync(projectRoot: string, props: Pick<Options, 'install'>) {
-  // Install dependencies
   const shouldInstall = props.install;
   const packageManager = resolvePackageManager();
+
+  // Configure package manager, which is unrelated to installing or not
+  await configureNodeDependenciesAsync(projectRoot, packageManager);
+
+  // Install dependencies
   let podsInstalled: boolean = false;
   const needsPodsInstalled = await fs.existsSync(path.join(projectRoot, 'ios'));
   if (shouldInstall) {
@@ -91,6 +98,19 @@ async function createTemplateAsync(inputPath: string, props: Options): Promise<v
     resolvedTemplate = await promptTemplateAsync();
   } else {
     resolvedTemplate = props.template ?? null;
+    console.log(
+      chalk`Creating an Expo project using the {cyan ${resolvedTemplate ?? 'default'}} template.\n`
+    );
+    if (!resolvedTemplate) {
+      console.log(
+        chalk`{gray To choose from all available templates ({underline https://github.com/expo/expo/tree/main/templates}) pass in the --template arg:}`
+      );
+      console.log(chalk`  {gray $} ${formatSelfCommand()} {cyan --template}\n`);
+      console.log(
+        chalk`{gray To choose from all available examples ({underline https://github.com/expo/examples}) pass in the --example arg:}`
+      );
+      console.log(chalk`  {gray $} ${formatSelfCommand()} {cyan --example}\n`);
+    }
   }
 
   const projectRoot = await resolveProjectRootArgAsync(inputPath, props);
@@ -140,7 +160,43 @@ async function createExampleAsync(inputPath: string, props: Options): Promise<vo
     resolvedExample = props.example;
   }
 
+  // Handle remapping aliases and throwing for deprecated examples. If we are
+  // unable to fetch metadata, for any reason, just proceed without it. This protects
+  // against a broken metadata endpoint from bringing down the entire command.
+  let metadata: ExamplesMetadata | null = null;
+  try {
+    metadata = await fetchMetadataAsync();
+
+    if (!metadata || !metadata.aliases || !metadata.deprecated) {
+      throw new Error('No metadata found.');
+    }
+  } catch (error: any) {
+    debug(`Error fetching metadata: %O`, error);
+    Log.error(`Error fetching metadata, proceeding without alias or deprecation data.`);
+  }
+
+  if (metadata && metadata.aliases[resolvedExample]) {
+    const alias = metadata.aliases[resolvedExample];
+    const destination = typeof alias === 'string' ? alias : alias.destination;
+    console.log(
+      chalk`{gray The {cyan ${resolvedExample}} example has been renamed to {cyan ${destination}}.}`
+    );
+
+    // Optional message to show when an example is aliased, in case additional context is required
+    if (typeof alias === 'object' && alias.message) {
+      console.log(chalk`{gray ${alias.message}}`);
+    }
+
+    resolvedExample = destination;
+  } else if (metadata && metadata.deprecated[resolvedExample]) {
+    throw new Error(getDeprecatedExampleErrorMessage(resolvedExample, metadata));
+  }
+
+  // Ensure the example exists after performing remapping and deprecation checks.
   await ensureExampleExists(resolvedExample);
+
+  // Log the status after aliases and deprecated examples are handled.
+  console.log(chalk`Creating an Expo project using the {cyan ${resolvedExample}} example.\n`);
 
   const projectRoot = await resolveProjectRootArgAsync(inputPath, props);
   await fs.promises.mkdir(projectRoot, { recursive: true });
@@ -186,12 +242,26 @@ function getChangeDirectoryPath(projectRoot: string): string {
   return projectRoot;
 }
 
-async function installNodeDependenciesAsync(
+async function configureNodeDependenciesAsync(
   projectRoot: string,
   packageManager: PackageManagerName
 ): Promise<void> {
   try {
     await configurePackageManager(projectRoot, packageManager, { silent: false });
+  } catch (error: any) {
+    debug(`Error configuring package manager: %O`, error);
+    Log.error(
+      `Something went wrong configuring the package manager. Check your ${packageManager} logs. Continuing to create the app.`
+    );
+    Log.exception(error);
+  }
+}
+
+async function installNodeDependenciesAsync(
+  projectRoot: string,
+  packageManager: PackageManagerName
+): Promise<void> {
+  try {
     await installDependenciesAsync(projectRoot, packageManager, { silent: false });
   } catch (error: any) {
     debug(`Error installing node modules: %O`, error);
@@ -225,4 +295,19 @@ export function logNodeInstallWarning(
     console.log(`  npx pod-install`);
   }
   console.log();
+}
+
+function getDeprecatedExampleErrorMessage(example: string, metadata: ExamplesMetadata) {
+  const { message, outdatedExampleHref } = metadata.deprecated[example];
+  let output = `${example} is no longer available.`;
+
+  if (message) {
+    output += ` ${message}`;
+  }
+
+  if (outdatedExampleHref) {
+    output += `\n\nYou can also refer to the outdated example code in examples git repository history, if it is useful: ${outdatedExampleHref}`;
+  }
+
+  return output;
 }

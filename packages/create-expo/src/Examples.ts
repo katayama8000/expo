@@ -1,16 +1,20 @@
 import JsonFile from '@expo/json-file';
 import chalk from 'chalk';
 import fs from 'fs';
-import fetch from 'node-fetch';
 import path from 'path';
 import prompts from 'prompts';
-import { Stream } from 'stream';
-import tar from 'tar';
+import { Readable, Stream } from 'stream';
+import { extract as tarExtract } from 'tar';
 import { promisify } from 'util';
 
-import { sanitizeTemplateAsync } from './Template';
-import { createEntryResolver, createFileTransform } from './createFileTransform';
+import {
+  getTemplateFilesToRenameAsync,
+  renameTemplateAppNameAsync,
+  sanitizeTemplateAsync,
+} from './Template';
+import { createEntryResolver } from './createFileTransform';
 import { env } from './utils/env';
+import { fetch } from './utils/fetch';
 
 const debug = require('debug')('expo:init:template') as typeof console.log;
 const pipeline = promisify(Stream.pipeline);
@@ -25,6 +29,23 @@ export type GithubContent = {
   type: 'file' | 'dir';
 };
 
+export type ExamplesMetadata = {
+  aliases: {
+    [key: string]:
+      | string
+      | {
+          destination: string;
+          message?: string;
+        };
+  };
+  deprecated: {
+    [key: string]: {
+      outdatedExampleHref: string;
+      message?: string;
+    };
+  };
+};
+
 /** List all existing examples directory from https://github.com/expo/examples. */
 async function listExamplesAsync() {
   const response = await fetch('https://api.github.com/repos/expo/examples/contents');
@@ -32,8 +53,19 @@ async function listExamplesAsync() {
     throw new Error('Unexpected GitHub API response: https://github.com/expo/examples');
   }
 
-  const data: GithubContent[] = await response.json();
+  const data = (await response.json()) as GithubContent[];
   return data.filter((item) => item.type === 'dir' && !item.name.startsWith('.'));
+}
+
+/** Fetch the metadata for the examples from https://github.com/expo/examples. This includes aliases and deprecated examples. */
+export async function fetchMetadataAsync() {
+  const response = await fetch(`https://raw.githubusercontent.com/expo/examples/master/meta.json`);
+
+  if (!response.ok) {
+    throw new Error(`Unexpected GitHub API response: ${response.status} - ${response.statusText}`);
+  }
+
+  return (await response.json()) as ExamplesMetadata;
 }
 
 /** Determine if an example exists, using only its name */
@@ -75,7 +107,7 @@ export async function promptExamplesAsync() {
 
   if (!answer) {
     console.log();
-    console.log(chalk`Please specify the example, example: {cyan --example with-router}`);
+    console.log(chalk`Specify the example name, for example: {cyan --example with-router}`);
     console.log();
     process.exit(1);
   }
@@ -92,12 +124,19 @@ export async function downloadAndExtractExampleAsync(root: string, name: string)
     throw new Error('Failed to fetch the examples code from https://github.com/expo/examples');
   }
 
+  if (!response.body) {
+    debug(
+      `Failed to fetch the examples code, Github responded without content, received status "${response.status}"`
+    );
+    throw new Error('Failed to fetch the examples code from https://github.com/expo/examples');
+  }
+
   await pipeline(
-    response.body,
-    tar.extract(
+    // @ts-expect-error see https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/65542
+    Readable.fromWeb(response.body),
+    tarExtract(
       {
         cwd: root,
-        transform: createFileTransform(projectName),
         onentry: createEntryResolver(projectName),
         strip: 2,
       },
@@ -105,6 +144,12 @@ export async function downloadAndExtractExampleAsync(root: string, name: string)
     )
   );
 
+  const files = await getTemplateFilesToRenameAsync({ cwd: root });
+  await renameTemplateAppNameAsync({
+    cwd: root,
+    files,
+    name: projectName,
+  });
   await sanitizeTemplateAsync(root);
   await sanitizeScriptsAsync(root);
 }

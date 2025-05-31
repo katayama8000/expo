@@ -3,10 +3,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.normalizeOptionsAsync = exports.DEFAULT_IGNORE_PATHS = exports.FINGERPRINT_IGNORE_FILENAME = void 0;
+exports.DEFAULT_SOURCE_SKIPS = exports.DEFAULT_IGNORE_PATHS = exports.FINGERPRINT_IGNORE_FILENAME = void 0;
+exports.normalizeOptionsAsync = normalizeOptionsAsync;
 const promises_1 = __importDefault(require("fs/promises"));
 const os_1 = __importDefault(require("os"));
 const path_1 = __importDefault(require("path"));
+const Config_1 = require("./Config");
+const ExpoResolver_1 = require("./ExpoResolver");
+const SourceSkips_1 = require("./sourcer/SourceSkips");
+const Path_1 = require("./utils/Path");
 exports.FINGERPRINT_IGNORE_FILENAME = '.fingerprintignore';
 exports.DEFAULT_IGNORE_PATHS = [
     exports.FINGERPRINT_IGNORE_FILENAME,
@@ -32,6 +37,8 @@ exports.DEFAULT_IGNORE_PATHS = [
     // iOS
     '**/ios/Pods/**/*',
     '**/ios/build/**/*',
+    '**/ios/.xcode.env.local',
+    '**/ios/**/project.xcworkspace',
     '**/ios/*.xcworkspace/xcuserdata/**/*',
     // System files that differ from machine to machine
     '**/.DS_Store',
@@ -40,46 +47,36 @@ exports.DEFAULT_IGNORE_PATHS = [
     'app.config.js',
     'app.config.json',
     'app.json',
-    // Ignore default javascript files when calling `getConfig()`
-    '**/node_modules/@babel/**/*',
-    '**/node_modules/@expo/**/*',
-    '**/node_modules/@jridgewell/**/*',
-    '**/node_modules/expo/config.js',
-    '**/node_modules/expo/config-plugins.js',
-    `**/node_modules/{${[
-        'chalk',
-        'debug',
-        'escape-string-regexp',
-        'getenv',
-        'graceful-fs',
-        'has-flag',
-        'imurmurhash',
-        'js-tokens',
-        'json5',
-        'picocolors',
-        'lines-and-columns',
-        'require-from-string',
-        'resolve-from',
-        'signal-exit',
-        'sucrase',
-        'supports-color',
-        'ts-interface-checker',
-        'write-file-atomic',
-    ].join(',')}}/**/*`,
+    // Ignore nested node_modules
+    '**/node_modules/**/node_modules/**',
 ];
+exports.DEFAULT_SOURCE_SKIPS = SourceSkips_1.SourceSkips.PackageJsonAndroidAndIosScriptsIfNotContainRun;
 async function normalizeOptionsAsync(projectRoot, options) {
+    const config = await (0, Config_1.loadConfigAsync)(projectRoot, options?.silent ?? false);
+    const ignorePathMatchObjects = await collectIgnorePathsAsync(projectRoot, config?.ignorePaths, options);
     return {
-        ...options,
-        platforms: options?.platforms ?? ['android', 'ios'],
-        concurrentIoLimit: options?.concurrentIoLimit ?? os_1.default.cpus().length,
-        hashAlgorithm: options?.hashAlgorithm ?? 'sha1',
-        ignorePaths: await collectIgnorePathsAsync(projectRoot, options),
+        // Defaults
+        platforms: ['android', 'ios'],
+        concurrentIoLimit: os_1.default.cpus().length,
+        hashAlgorithm: 'sha1',
+        sourceSkips: exports.DEFAULT_SOURCE_SKIPS,
+        // Options from config
+        ...config,
+        // Explicit options
+        ...Object.fromEntries(Object.entries(options ?? {}).filter(([_, v]) => v != null)),
+        // These options are computed by both default and explicit options, so we put them last.
+        enableReactImportsPatcher: options?.enableReactImportsPatcher ??
+            config?.enableReactImportsPatcher ??
+            (0, ExpoResolver_1.satisfyExpoVersion)(projectRoot, '<52.0.0') ??
+            false,
+        ignorePathMatchObjects,
+        ignoreDirMatchObjects: (0, Path_1.buildDirMatchObjects)(ignorePathMatchObjects),
     };
 }
-exports.normalizeOptionsAsync = normalizeOptionsAsync;
-async function collectIgnorePathsAsync(projectRoot, options) {
+async function collectIgnorePathsAsync(projectRoot, pathsFromConfig, options) {
     const ignorePaths = [
         ...exports.DEFAULT_IGNORE_PATHS,
+        ...(pathsFromConfig ?? []),
         ...(options?.ignorePaths ?? []),
         ...(options?.dirExcludes?.map((dirExclude) => `${dirExclude}/**/*`) ?? []),
     ];
@@ -95,6 +92,6 @@ async function collectIgnorePathsAsync(projectRoot, options) {
         }
     }
     catch { }
-    return ignorePaths;
+    return (0, Path_1.buildPathMatchObjects)(ignorePaths);
 }
 //# sourceMappingURL=Options.js.map

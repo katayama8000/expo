@@ -1,4 +1,5 @@
-import { DeviceEventEmitter, PermissionStatus } from 'expo-modules-core';
+import { PermissionStatus } from 'expo-modules-core';
+import { DeviceEventEmitter } from 'react-native';
 import { RecordingOptionsPresets } from './Audio/RecordingConstants';
 async function getPermissionWithQueryAsync(name) {
     if (!navigator || !navigator.permissions || !navigator.permissions.query)
@@ -39,6 +40,9 @@ function getUserMedia(constraints) {
             throw error;
         };
     return new Promise((resolve, reject) => {
+        // TODO(@kitten): The types indicates that this is incorrect.
+        // Please check whether this is correct!
+        // @ts-expect-error: The `successCallback` doesn't match a `resolve` function
         getUserMedia.call(navigator, constraints, resolve, reject);
     });
 }
@@ -103,6 +107,9 @@ async function setStatusForMedia(media, status) {
     if (status.rate !== undefined) {
         media.playbackRate = status.rate;
     }
+    if (status.shouldCorrectPitch !== undefined) {
+        media.preservesPitch = status.shouldCorrectPitch;
+    }
     if (status.volume !== undefined) {
         media.volume = status.volume;
     }
@@ -114,7 +121,7 @@ async function setStatusForMedia(media, status) {
     }
     return getStatusFromMedia(media);
 }
-let mediaRecorder /*MediaRecorder*/ = null;
+let mediaRecorder = null;
 let mediaRecorderUptimeOfLastStartResume = 0;
 let mediaRecorderDurationAlreadyRecorded = 0;
 let mediaRecorderIsRecording = false;
@@ -188,6 +195,7 @@ export default {
             uri: null,
         };
     },
+    // TODO(@kitten): Needs to be typed
     async prepareAudioRecorder(options) {
         if (typeof navigator !== 'undefined' && !navigator.mediaDevices) {
             throw new Error('No media devices available');
@@ -239,14 +247,15 @@ export default {
         return this.getAudioRecordingStatus();
     },
     async stopAudioRecording() {
-        if (mediaRecorder === null) {
+        const _mediaRecorder = mediaRecorder;
+        if (_mediaRecorder === null) {
             throw new Error('Cannot start an audio recording without initializing a MediaRecorder. Run prepareToRecordAsync() before attempting to start an audio recording.');
         }
-        if (mediaRecorder.state === 'inactive') {
+        if (_mediaRecorder.state === 'inactive') {
             return this.getAudioRecordingStatus();
         }
-        const dataPromise = new Promise((resolve) => mediaRecorder.addEventListener('dataavailable', (e) => resolve(e.data)));
-        mediaRecorder.stop();
+        const dataPromise = new Promise((resolve) => _mediaRecorder.addEventListener('dataavailable', (e) => resolve(e.data)));
+        _mediaRecorder.stop();
         const data = await dataPromise;
         const url = URL.createObjectURL(data);
         return {

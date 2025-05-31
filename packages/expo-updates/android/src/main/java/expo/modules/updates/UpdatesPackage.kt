@@ -2,13 +2,12 @@ package expo.modules.updates
 
 import android.app.Application
 import android.content.Context
-import android.content.pm.PackageManager
-import android.util.Log
 import androidx.annotation.UiThread
 import androidx.annotation.WorkerThread
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.bridge.ReactContext
+import com.facebook.react.devsupport.interfaces.DevSupportManager
 import expo.modules.core.interfaces.ApplicationLifecycleListener
 import expo.modules.core.interfaces.Package
 import expo.modules.core.interfaces.ReactActivityHandler
@@ -23,39 +22,32 @@ import kotlinx.coroutines.withContext
  * applicable environments.
  */
 class UpdatesPackage : Package {
-  private val useNativeDebug = BuildConfig.EX_UPDATES_NATIVE_DEBUG
-  private var mShouldAutoSetup: Boolean? = null
 
   override fun createReactNativeHostHandlers(context: Context): List<ReactNativeHostHandler> {
     val handler: ReactNativeHostHandler = object : ReactNativeHostHandler {
 
       override fun getJSBundleFile(useDeveloperSupport: Boolean): String? {
-        return if (shouldAutoSetup(context) && (useNativeDebug || !useDeveloperSupport)) UpdatesController.instance.launchAssetFile else null
+        return if (UpdatesController.instance.isActiveController) UpdatesController.instance.launchAssetFile else null
       }
 
       override fun getBundleAssetName(useDeveloperSupport: Boolean): String? {
-        return if (shouldAutoSetup(context) && (useNativeDebug || !useDeveloperSupport)) UpdatesController.instance.bundleAssetName else null
+        return if (UpdatesController.instance.isActiveController) UpdatesController.instance.bundleAssetName else null
       }
 
       override fun onWillCreateReactInstance(useDeveloperSupport: Boolean) {
-        if (shouldAutoSetup(context) && (useNativeDebug || !useDeveloperSupport)) {
-          UpdatesController.initialize(context)
-        }
+        UpdatesController.initialize(context)
+      }
+
+      override fun onDidCreateDevSupportManager(devSupportManager: DevSupportManager) {
+        UpdatesController.instance.onDidCreateDevSupportManager(devSupportManager)
       }
 
       override fun onDidCreateReactInstance(useDeveloperSupport: Boolean, reactContext: ReactContext) {
-        // WHEN_VERSIONING_REMOVE_FROM_HERE
-        // This code path breaks versioning and is not necessary for Expo Go.
-        if (shouldAutoSetup(context) && (useNativeDebug || !useDeveloperSupport)) {
-          UpdatesController.instance.onDidCreateReactInstanceManager(reactContext)
-        }
-        // WHEN_VERSIONING_REMOVE_TO_HERE
+        UpdatesController.instance.onDidCreateReactInstance(reactContext)
       }
 
       override fun onReactInstanceException(useDeveloperSupport: Boolean, exception: Exception) {
-        if (shouldAutoSetup(context) && (useNativeDebug || !useDeveloperSupport)) {
-          UpdatesController.instance.onReactInstanceException(exception)
-        }
+        UpdatesController.instance.onReactInstanceException(exception)
       }
     }
     return listOf(handler)
@@ -64,12 +56,12 @@ class UpdatesPackage : Package {
   override fun createReactActivityHandlers(activityContext: Context): List<ReactActivityHandler> {
     val handler = object : ReactActivityHandler {
       override fun getDelayLoadAppHandler(activity: ReactActivity, reactNativeHost: ReactNativeHost): ReactActivityHandler.DelayLoadAppHandler? {
-        if (!BuildConfig.EX_UPDATES_ANDROID_DELAY_LOAD_APP) {
+        if (!BuildConfig.EX_UPDATES_ANDROID_DELAY_LOAD_APP || isUsingCustomInit) {
           return null
         }
         val context = activity.applicationContext
         val useDeveloperSupport = reactNativeHost.useDeveloperSupport
-        if (shouldAutoSetup(context) && (useNativeDebug || !useDeveloperSupport)) {
+        if (!useDeveloperSupport || isUsingNativeDebug) {
           return ReactActivityHandler.DelayLoadAppHandler { whenReadyRunnable ->
             CoroutineScope(Dispatchers.IO).launch {
               startUpdatesController(context)
@@ -83,9 +75,11 @@ class UpdatesPackage : Package {
       @WorkerThread
       private suspend fun startUpdatesController(context: Context) {
         withContext(Dispatchers.IO) {
-          UpdatesController.initialize(context)
-          // Call the synchronous `launchAssetFile()` function to wait for updates ready
-          UpdatesController.instance.launchAssetFile
+          if (!UpdatesPackage.isUsingCustomInit) {
+            UpdatesController.initialize(context)
+            // Call the synchronous `launchAssetFile()` function to wait for updates ready
+            UpdatesController.instance.launchAssetFile
+          }
         }
       }
 
@@ -104,7 +98,7 @@ class UpdatesPackage : Package {
     val handler = object : ApplicationLifecycleListener {
       override fun onCreate(application: Application) {
         super.onCreate(application)
-        if (shouldAutoSetup(context) && isRunningAndroidTest()) {
+        if (isRunningAndroidTest()) {
           // Preload updates to prevent Detox ANR
           UpdatesController.initialize(context)
           UpdatesController.instance.launchAssetFile
@@ -113,20 +107,6 @@ class UpdatesPackage : Package {
     }
 
     return listOf(handler)
-  }
-
-  private fun shouldAutoSetup(context: Context): Boolean {
-    if (mShouldAutoSetup == null) {
-      mShouldAutoSetup = try {
-        val pm = context.packageManager
-        val ai = pm.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
-        ai.metaData.getBoolean("expo.modules.updates.AUTO_SETUP", true)
-      } catch (e: Exception) {
-        Log.e(TAG, "Could not read expo-updates configuration data in AndroidManifest", e)
-        true
-      }
-    }
-    return mShouldAutoSetup!!
   }
 
   private fun isRunningAndroidTest(): Boolean {
@@ -140,5 +120,7 @@ class UpdatesPackage : Package {
 
   companion object {
     private val TAG = UpdatesPackage::class.java.simpleName
+    val isUsingNativeDebug = BuildConfig.EX_UPDATES_NATIVE_DEBUG
+    internal val isUsingCustomInit = BuildConfig.EX_UPDATES_CUSTOM_INIT
   }
 }

@@ -52,9 +52,7 @@ interface State {
   voice?: string;
 }
 
-// See: https://github.com/expo/expo/pull/10229#discussion_r490961694
-// eslint-disable-next-line @typescript-eslint/ban-types
-export default class TextToSpeechScreen extends React.Component<{}, State> {
+export default class TextToSpeechScreen extends React.Component<object, State> {
   static navigationOptions = {
     title: 'Speech',
   };
@@ -68,9 +66,7 @@ export default class TextToSpeechScreen extends React.Component<{}, State> {
   };
 
   async componentDidMount() {
-    if (Platform.OS === 'ios') {
-      await this._loadAllVoices();
-    }
+    await this._loadAllVoices();
   }
 
   render() {
@@ -99,7 +95,7 @@ export default class TextToSpeechScreen extends React.Component<{}, State> {
           </View>
         )}
 
-        {Platform.OS === 'ios' && this.state.voiceList && (
+        {this.state.voiceList && (
           <View>
             <Picker
               selectedValue={this.state.voice}

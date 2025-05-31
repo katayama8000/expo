@@ -1,8 +1,10 @@
 import path from 'path';
 
 import requireContext from './require-context-ponyfill';
+import { NativeIntent } from '../types';
 
 export type ReactComponent = () => React.ReactElement<any, any> | null;
+export type NativeIntentStub = NativeIntent;
 export type FileStub =
   | (Record<string, unknown> & {
       default: ReactComponent;
@@ -10,11 +12,15 @@ export type FileStub =
     })
   | ReactComponent;
 
+export type MemoryContext = Record<string, FileStub | NativeIntentStub> & {
+  '+native-intent'?: NativeIntentStub;
+};
+
 export { requireContext };
 
 const validExtensions = ['.js', '.jsx', '.ts', '.tsx'];
 
-export function inMemoryContext(context: Record<string, FileStub>) {
+export function inMemoryContext(context: MemoryContext) {
   return Object.assign(
     function (id: string) {
       id = id.replace(/^\.\//, '').replace(/\.\w*$/, '');
@@ -27,13 +33,16 @@ export function inMemoryContext(context: Record<string, FileStub>) {
         Object.keys(context).map((key) => {
           const ext = path.extname(key);
           key = key.replace(/^\.\//, '');
-          return validExtensions.includes(ext) ? `./${key}` : `./${key}.js`;
+          key = key.startsWith('/') ? key : `./${key}`;
+          key = validExtensions.includes(ext) ? key : `${key}.js`;
+
+          return key;
         }),
     }
   );
 }
 
-export function requireContextWithOverrides(dir: string, overrides: Record<string, FileStub>) {
+export function requireContextWithOverrides(dir: string, overrides: MemoryContext) {
   const existingContext = requireContext(path.resolve(process.cwd(), dir));
 
   return Object.assign(

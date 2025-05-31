@@ -15,14 +15,43 @@ import { sortRoutes } from './sortRoutes';
 export type ExpoRouterServerManifestV1Route<TRegex = string> = {
   file: string;
   page: string;
+  /**
+   * Keys are route param names that have been normalized for a regex named-matcher, values are the original route param names.
+   */
   routeKeys: Record<string, string>;
+  /**
+   * Regex for matching a path against the route.
+   * The regex is normalized for named matchers so keys must be looked up against the `routeKeys` object to collect the original route param names.
+   * Regex matching alone cannot accurately route to a file, the order in which routes are matched is equally important to ensure correct priority.
+   */
   namedRegex: TRegex;
+  /** Indicates that the route was generated and does not map to any file in the project's routes directory. */
   generated?: boolean;
+  /** Indicates that this is a redirect that should use 301 instead of 307 */
+  permanent?: boolean;
+  /** If a redirect, which methods are allowed. Undefined represents all methods */
+  methods?: string[];
 };
 
 export type ExpoRouterServerManifestV1<TRegex = string> = {
-  apiRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
+  /**
+   * Rewrites. These occur first
+   */
+  rewrites: ExpoRouterServerManifestV1Route<TRegex>[];
+  /**
+   * List of routes that match second. Returns 301 and redirects to another path.
+   */
+  redirects: ExpoRouterServerManifestV1Route<TRegex>[];
+  /**
+   * Routes that return static HTML files for a given path.
+   * These are only matched against requests with method `GET` and `HEAD`.
+   */
   htmlRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
+  /**
+   * Routes that are matched after HTML routes and invoke WinterCG-compliant functions.
+   */
+  apiRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
+  /** List of routes that are matched last and return with status code 404. */
   notFoundRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
 };
 
@@ -55,64 +84,104 @@ function uniqueBy<T>(arr: T[], key: (item: T) => string): T[] {
 
 // Given a nested route tree, return a flattened array of all routes that can be matched.
 export function getServerManifest(route: RouteNode): ExpoRouterServerManifestV1 {
-  function getFlatNodes(route: RouteNode): [string, RouteNode][] {
+  function getFlatNodes(route: RouteNode, parentRoute: string = ''): [string, string, RouteNode][] {
+    // Use a recreated route instead of contextKey because we duplicate nodes to support array syntax.
+    const absoluteRoute = [parentRoute, route.route].filter(Boolean).join('/');
+
     if (route.children.length) {
-      return route.children.map((child) => getFlatNodes(child)).flat();
+      return route.children.map((child) => getFlatNodes(child, absoluteRoute)).flat();
     }
 
     // API Routes are handled differently to HTML routes because they have no nested behavior.
     // An HTML route can be different based on parent segments due to layout routes, therefore multiple
     // copies should be rendered. However, an API route is always the same regardless of parent segments.
     let key: string;
-    if (route.type === 'api') {
+    if (route.type.includes('api')) {
       key = getContextKey(route.contextKey).replace(/\/index$/, '') ?? '/';
     } else {
-      key = getContextKey(route.route).replace(/\/index$/, '') ?? '/';
+      key = getContextKey(absoluteRoute).replace(/\/index$/, '') ?? '/';
     }
-    return [[key, route]];
+    return [[key, '/' + absoluteRoute, route]];
   }
 
   // Remove duplicates from the runtime manifest which expands array syntax.
   const flat = getFlatNodes(route)
-    .sort(([, a], [, b]) => sortRoutes(b, a))
+    .sort(([, , a], [, , b]) => sortRoutes(b, a))
     .reverse();
 
   const apiRoutes = uniqueBy(
-    flat.filter(([, route]) => route.type === 'api'),
+    flat.filter(([, , route]) => route.type === 'api'),
     ([path]) => path
   );
+
   const otherRoutes = uniqueBy(
-    flat.filter(([, route]) => route.type === 'route'),
+    flat.filter(
+      ([, , route]) =>
+        route.type === 'route' ||
+        (route.type === 'rewrite' && (route.methods === undefined || route.methods.includes('GET')))
+    ),
     ([path]) => path
   );
-  const standardRoutes = otherRoutes.filter(([, route]) => !isNotFoundRoute(route));
-  const notFoundRoutes = otherRoutes.filter(([, route]) => isNotFoundRoute(route));
+
+  const redirects = uniqueBy(
+    flat.filter(([, , route]) => route.type === 'redirect'),
+    ([path]) => path
+  )
+    .map((redirect) => {
+      redirect[1] =
+        flat.find(([, , route]) => route.contextKey === redirect[2].destinationContextKey)?.[0] ??
+        '/';
+
+      return redirect;
+    })
+    .reverse();
+
+  const rewrites = uniqueBy(
+    flat.filter(([, , route]) => route.type === 'rewrite'),
+    ([path]) => path
+  )
+    .map((rewrite) => {
+      rewrite[1] =
+        flat.find(([, , route]) => route.contextKey === rewrite[2].destinationContextKey)?.[0] ??
+        '/';
+
+      return rewrite;
+    })
+    .reverse();
+
+  const standardRoutes = otherRoutes.filter(([, , route]) => !isNotFoundRoute(route));
+  const notFoundRoutes = otherRoutes.filter(([, , route]) => isNotFoundRoute(route));
 
   return {
-    apiRoutes: getMatchableManifestForPaths(
-      apiRoutes.map(([normalizedRoutePath, node]) => [normalizedRoutePath, node])
-    ),
-    htmlRoutes: getMatchableManifestForPaths(
-      standardRoutes.map(([normalizedRoutePath, node]) => [normalizedRoutePath, node])
-    ),
-    notFoundRoutes: getMatchableManifestForPaths(
-      notFoundRoutes.map(([normalizedRoutePath, node]) => [normalizedRoutePath, node])
-    ),
+    apiRoutes: getMatchableManifestForPaths(apiRoutes),
+    htmlRoutes: getMatchableManifestForPaths(standardRoutes),
+    notFoundRoutes: getMatchableManifestForPaths(notFoundRoutes),
+    redirects: getMatchableManifestForPaths(redirects),
+    rewrites: getMatchableManifestForPaths(rewrites),
   };
 }
 
 function getMatchableManifestForPaths(
-  paths: [string, RouteNode][]
+  paths: [string, string, RouteNode][]
 ): ExpoRouterServerManifestV1Route[] {
-  return paths.map((normalizedRoutePath) => {
+  return paths.map(([normalizedRoutePath, absoluteRoute, node]) => {
     const matcher: ExpoRouterServerManifestV1Route = getNamedRouteRegex(
-      normalizedRoutePath[0],
-      getContextKey(normalizedRoutePath[1].route),
-      normalizedRoutePath[1].contextKey
+      normalizedRoutePath,
+      absoluteRoute,
+      node.contextKey
     );
-    if (normalizedRoutePath[1].generated) {
+    if (node.generated) {
       matcher.generated = true;
     }
+
+    if (node.permanent) {
+      matcher.permanent = true;
+    }
+
+    if (node.methods) {
+      matcher.methods = node.methods;
+    }
+
     return matcher;
   });
 }

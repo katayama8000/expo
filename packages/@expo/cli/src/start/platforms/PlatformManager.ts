@@ -7,7 +7,6 @@ import { DeviceManager } from './DeviceManager';
 import { Log } from '../../log';
 import { CommandError, UnimplementedError } from '../../utils/errors';
 import { learnMore } from '../../utils/link';
-import { logEventAsync } from '../../utils/telemetry';
 
 const debug = require('debug')('expo:start:platforms:platformManager') as typeof console.log;
 
@@ -116,20 +115,15 @@ export class PlatformManager<
     const { exp } = getConfig(this.projectRoot);
     const sdkVersion = exp.sdkVersion;
     assert(sdkVersion, 'sdkVersion should be resolved by getConfig');
-    const installedExpo = await deviceManager.ensureExpoGoAsync(sdkVersion);
+    await deviceManager.ensureExpoGoAsync(sdkVersion);
 
     deviceManager.activateWindowAsync();
-    await deviceManager.openUrlAsync(url);
-
-    await logEventAsync('Open Url on Device', {
-      platform: this.props.platform,
-      installedExpo,
-    });
+    await deviceManager.openUrlAsync(url, { appId: deviceManager.getExpoGoAppId() });
 
     return { url };
   }
 
-  private async openProjectInCustomRuntimeAsync(
+  protected async openProjectInCustomRuntimeAsync(
     resolveSettings: Partial<IResolveDeviceProps> = {},
     props: Partial<IOpenInCustomProps> = {}
   ): Promise<{ url: string }> {
@@ -142,6 +136,7 @@ export class PlatformManager<
     let url = this.props.getCustomRuntimeUrl({ scheme: props.scheme });
     debug(`Opening project in custom runtime: ${url} -- %O`, props);
     // TODO: It's unclear why we do application id validation when opening with a URL
+    // NOTE: But having it enables us to allow the deep link to directly open on iOS simulators without the modal.
     const applicationId = props.applicationId ?? (await this._getAppIdResolver().getAppIdAsync());
 
     const deviceManager = await this.props.resolveDeviceAsync(resolveSettings);
@@ -149,17 +144,11 @@ export class PlatformManager<
     if (!(await deviceManager.isAppInstalledAndIfSoReturnContainerPathForIOSAsync(applicationId))) {
       throw new CommandError(
         `No development build (${applicationId}) for this project is installed. ` +
-          `Please make and install a development build on the device first.\n${learnMore(
+          `Install a development build on the target device and try again.\n${learnMore(
             'https://docs.expo.dev/development/build/'
           )}`
       );
     }
-
-    // TODO: Rethink analytics
-    await logEventAsync('Open Url on Device', {
-      platform: this.props.platform,
-      installedExpo: false,
-    });
 
     if (!url) {
       url = this._resolveAlternativeLaunchUrl(applicationId, props);
@@ -167,7 +156,10 @@ export class PlatformManager<
 
     deviceManager.logOpeningUrl(url);
     await deviceManager.activateWindowAsync();
-    await deviceManager.openUrlAsync(url);
+
+    await deviceManager.openUrlAsync(url, {
+      appId: applicationId,
+    });
 
     return {
       url,

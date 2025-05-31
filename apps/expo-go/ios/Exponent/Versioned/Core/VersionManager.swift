@@ -30,7 +30,7 @@ final class VersionManager: EXVersionManagerObjC {
     self.manifest = manifest
 
     configureReact(
-      enableTurboModules: manifest.experiments()?["turboModules"] as? Bool ?? false,
+      enableTurboModules: true,
       fatalHandler: fatalHandler,
       logFunction: logFunction,
       logThreshold: logThreshold
@@ -50,7 +50,7 @@ final class VersionManager: EXVersionManagerObjC {
    Returns a list of bridge modules to register when the bridge initializes.
    */
   @objc
-  override func extraModules(forBridge bridge: Any) -> [Any] {
+  override func extraModules() -> [Any] {
     // Ideally if we don't initialize the app context here, but unfortunately there is no better place in bridge lifecycle
     // that would work well for us (especially properly invalidating existing app context on reload).
     let legacyModuleRegistry = createLegacyModuleRegistry(params: params, manifest: manifest)
@@ -81,7 +81,7 @@ final class VersionManager: EXVersionManagerObjC {
     // Register additional Expo modules, specific to Expo Go.
     registerExpoModules()
 
-    return modules + super.extraModules(forBridge: bridge)
+    return modules + super.extraModules()
   }
 
   /**
@@ -106,6 +106,23 @@ final class VersionManager: EXVersionManagerObjC {
       updatesKernelService: updatesKernelService,
       scopeKey: manifest.scopeKey()
     ), preventModuleOverriding: true)
+
+    // Override expo-notifications modules
+    registerExpoNotificationsModules(appContext)
+  }
+
+  private func registerExpoNotificationsModules(_ appContext: AppContext) {
+    let modules: [Module] = [
+      ExpoGoNotificationsCategoriesModule(appContext: appContext, scopeKey: manifest.scopeKey()),
+      ExpoGoNotificationsEmitterModule(appContext: appContext, scopeKey: manifest.scopeKey()),
+      ExpoGoNotificationsHandlerModule(appContext: appContext, scopeKey: manifest.scopeKey()),
+      ExpoGoNotificationsPresentationModule(appContext: appContext, scopeKey: manifest.scopeKey()),
+      ExpoGoNotificationsSchedulerModule(appContext: appContext, scopeKey: manifest.scopeKey()),
+      ExpoGoNotificationsServerRegistrationModule(appContext: appContext, scopeKey: manifest.scopeKey())
+    ]
+    for module in modules {
+      appContext.moduleRegistry.register(module: module, preventModuleOverriding: true)
+    }
   }
 
   private func createAppContextConfig() -> AppContextConfig {
@@ -120,7 +137,8 @@ final class VersionManager: EXVersionManagerObjC {
     }
     return AppContextConfig(
       documentDirectory: URL(fileURLWithPath: documentDirectory),
-      cacheDirectory: URL(fileURLWithPath: cacheDirectory)
+      cacheDirectory: URL(fileURLWithPath: cacheDirectory),
+      appGroups: nil
     )
   }
 }

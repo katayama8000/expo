@@ -10,7 +10,6 @@ import resolve from 'resolve';
 import resolveFrom from 'resolve-from';
 import { promisify } from 'util';
 
-import { ForwardHtmlError } from './MetroBundlerDevServer';
 import { fetchManifest } from './fetchRouterManifest';
 import { getErrorOverlayHtmlAsync, logMetroError } from './metroErrorInterface';
 import { warnInvalidWebOutput } from './router';
@@ -33,11 +32,11 @@ export function createRouteHandlerMiddleware(
       functionFilePath: string
     ) => Promise<null | Record<string, Function> | Response>;
     config: ProjectConfig;
-  }
+  } & import('expo-router/build/routes-manifest').Options
 ) {
   if (!resolveFrom.silent(projectRoot, 'expo-router')) {
     throw new CommandError(
-      'static and server rendering requires the expo-router package to be installed in your project.'
+      `static and server rendering requires the expo-router package to be installed in your project. Either install the expo-router package or change 'web.output' to 'static' in your app.json.`
     );
   }
 
@@ -65,6 +64,8 @@ export function createRouteHandlerMiddleware(
             ],
             apiRoutes: [],
             notFoundRoutes: [],
+            redirects: [],
+            rewrites: [],
           }
         );
       },
@@ -74,14 +75,6 @@ export function createRouteHandlerMiddleware(
           return content;
         } catch (error: any) {
           // Forward the Metro server response as-is. It won't be pretty, but at least it will be accurate.
-          if (error instanceof ForwardHtmlError) {
-            return new Response(error.html, {
-              status: error.statusCode,
-              headers: {
-                'Content-Type': 'text/html',
-              },
-            });
-          }
 
           try {
             return new Response(
@@ -118,6 +111,20 @@ export function createRouteHandlerMiddleware(
       },
       logApiRouteExecutionError(error) {
         logMetroError(projectRoot, { error });
+      },
+      async handleApiRouteError(error) {
+        const htmlServerError = await getErrorOverlayHtmlAsync({
+          error,
+          projectRoot,
+          routerRoot: options.routerRoot!,
+        });
+
+        return new Response(htmlServerError, {
+          status: 500,
+          headers: {
+            'Content-Type': 'text/html',
+          },
+        });
       },
       async getApiRoute(route) {
         const { exp } = options.config;

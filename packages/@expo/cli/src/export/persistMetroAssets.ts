@@ -12,7 +12,7 @@ import fs from 'fs';
 import type { AssetData } from 'metro';
 import path from 'path';
 
-import { getAssetLocalPath } from './metroAssetLocalPath';
+import { drawableFileTypes, getAssetLocalPath } from './metroAssetLocalPath';
 import { ExportAssetMap } from './saveAssets';
 import { Log } from '../log';
 
@@ -24,6 +24,7 @@ function cleanAssetCatalog(catalogDir: string): void {
 }
 
 export async function persistMetroAssetsAsync(
+  projectRoot: string,
   assets: readonly AssetData[],
   {
     platform,
@@ -42,6 +43,12 @@ export async function persistMetroAssetsAsync(
   if (outputDirectory == null) {
     Log.warn('Assets destination folder is not set, skipping...');
     return;
+  }
+
+  // For iOS, we need to ensure that the outputDirectory exists.
+  // The bundle code and images build phase script always tries to access this folder
+  if (platform === 'ios' && !fs.existsSync(outputDirectory)) {
+    fs.mkdirSync(outputDirectory, { recursive: true });
   }
 
   let assetsToCopy: AssetData[] = [];
@@ -76,27 +83,29 @@ export async function persistMetroAssetsAsync(
   } else {
     assetsToCopy = [...assets];
   }
+  if (platform === 'android') {
+    await createKeepFileAsync(assetsToCopy, outputDirectory);
+  }
 
   const batches: Record<string, string> = {};
-
-  async function write(src: string, dest: string) {
-    if (files) {
-      const data = await fs.promises.readFile(src);
-      files.set(dest, {
-        contents: data,
-        targetDomain: platform === 'web' ? 'client' : undefined,
-      });
-    } else {
-      batches[src] = path.join(outputDirectory, dest);
-    }
-  }
 
   for (const asset of assetsToCopy) {
     const validScales = new Set(filterPlatformAssetScales(platform, asset.scales));
     for (let idx = 0; idx < asset.scales.length; idx++) {
       const scale = asset.scales[idx];
       if (validScales.has(scale)) {
-        await write(asset.files[idx], getAssetLocalPath(asset, { platform, scale, baseUrl }));
+        const src = asset.files[idx];
+        const dest = getAssetLocalPath(asset, { platform, scale, baseUrl });
+        if (files) {
+          const data = await fs.promises.readFile(src);
+          files.set(dest, {
+            contents: data,
+            assetId: getAssetIdForLogGrouping(projectRoot, asset),
+            targetDomain: platform === 'web' ? 'client' : undefined,
+          });
+        } else {
+          batches[src] = path.join(outputDirectory, dest);
+        }
       }
     }
   }
@@ -104,6 +113,34 @@ export async function persistMetroAssetsAsync(
   if (!files) {
     await copyInBatchesAsync(batches);
   }
+}
+
+export async function createKeepFileAsync(
+  assets: AssetData[],
+  outputDirectory: string
+): Promise<void> {
+  if (!assets.length) {
+    return;
+  }
+  const assetsList = [];
+  for (const asset of assets) {
+    const prefix = drawableFileTypes.has(asset.type) ? 'drawable' : 'raw';
+    assetsList.push(`@${prefix}/${getResourceIdentifier(asset)}`);
+  }
+  const keepPath = path.join(outputDirectory, 'raw/keep.xml');
+  const content = `<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="${assetsList.join(',')}" />`;
+  await fs.promises.mkdir(path.dirname(keepPath), { recursive: true });
+  await fs.promises.writeFile(keepPath, content);
+}
+
+export function getAssetIdForLogGrouping(
+  projectRoot: string,
+  asset: Partial<Pick<AssetData, 'fileSystemLocation' | 'name' | 'type'>>
+): string | undefined {
+  return 'fileSystemLocation' in asset && asset.fileSystemLocation != null && asset.name != null
+    ? path.relative(projectRoot, path.join(asset.fileSystemLocation, asset.name)) +
+        (asset.type ? '.' + asset.type : '')
+    : undefined;
 }
 
 function writeImageSet(imageSet: ImageSet): void {
@@ -183,7 +220,7 @@ export function copyInBatchesAsync(filesToCopy: Record<string, string>) {
   });
 }
 
-function copy(src: string, dest: string, callback: (error: NodeJS.ErrnoException) => void): void {
+function copy(src: string, dest: string, callback: (error?: NodeJS.ErrnoException) => void): void {
   fs.mkdir(path.dirname(dest), { recursive: true }, (err?) => {
     if (err) {
       callback(err);

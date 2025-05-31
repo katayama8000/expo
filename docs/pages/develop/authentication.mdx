@@ -4,9 +4,10 @@ description: Learn about setting up authentication in your Expo project.
 hideTOC: true
 ---
 
+import { BookOpen02Icon } from '@expo/styleguide-icons/outline/BookOpen02Icon';
+
 import { BoxLink } from '~/ui/components/BoxLink';
 import { CODE } from '~/ui/components/Text';
-import { BookOpen02Icon } from '@expo/styleguide-icons';
 
 Expo can be used to login to many popular providers on Android, iOS, and web. [`expo-auth-session`](/versions/latest/sdk/auth-session/) package allows [browser-based authentication](/versions/latest/sdk/auth-session/#how-web-browser-based-authentication-flows-work) (using OAuth or OpenID Connect) to your project for Android, iOS, and the web. You can also implement authentication using native libraries for third-party providers with [development builds](/develop/development-builds/create-a-build).
 
@@ -59,8 +60,8 @@ Expo can be used to login to many popular providers on Android, iOS, and web. [`
 />
 
 <BoxLink
-  title="Other authentication examples"
-  description="A collection of examples for implementing web-based authentication in your Expo app using AuthSession API and other OAuth providers. "
+  title="Authentication with OAuth or OpenID providers"
+  description="Learn how to utilize the expo-auth-session library to implement authentication with OAuth or OpenID providers."
   href="/guides/authentication"
   Icon={BookOpen02Icon}
 />

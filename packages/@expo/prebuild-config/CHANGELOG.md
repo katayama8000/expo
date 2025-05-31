@@ -4,16 +4,279 @@
 
 ### 🛠 Breaking changes
 
+### 🎉 New features
+
+### 🐛 Bug fixes
+
+- remove `expo-notifications` from auto plugins ([#36873](https://github.com/expo/expo/pull/36873) by [@vonovak](https://github.com/vonovak))
+
+### 💡 Others
+
+- Remove "Please" from warnings and errors ([#36862](https://github.com/expo/expo/pull/36862) by [@brentvatne](https://github.com/brentvatne))
+
+## 9.0.6 — 2025-05-06
+
+_This version does not introduce any user-facing changes._
+
+## 9.0.5 — 2025-05-01
+
+_This version does not introduce any user-facing changes._
+
+## 9.0.4 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 9.0.3 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 9.0.2 — 2025-04-25
+
+_This version does not introduce any user-facing changes._
+
+## 9.0.1 — 2025-04-21
+
+_This version does not introduce any user-facing changes._
+
+## 9.0.0 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 8.1.4 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 8.1.3 — 2025-04-11
+
+### 🎉 New features
+
+- [Android] Support `android.enableEdgeToEdge` field in app config. ([#35958](https://github.com/expo/expo/pull/35958) by [@behenate](https://github.com/behenate))
+
+## 8.1.2 — 2025-04-09
+
+_This version does not introduce any user-facing changes._
+
+## 8.1.1 — 2025-04-08
+
+_This version does not introduce any user-facing changes._
+
+## 8.1.0 — 2025-04-04
+
+### 🛠 Breaking changes
+
+- upgrade RN to 0.78 ([#35050](https://github.com/expo/expo/pull/35050) by [@vonovak](https://github.com/vonovak))
+
+### 💡 Others
+
+- update JSC reference in prebuild template, fix its usage in `ReactNative78CompatPlugin` ([#35349](https://github.com/expo/expo/pull/35349) by [@vonovak](https://github.com/vonovak))
+- Added `ReactNative78CompatPlugin` to support React Native 0.78. ([#33556](https://github.com/expo/expo/pull/33556) by [@kudo](https://github.com/kudo))
+- Removed creating the bridging header from the defaults plugin and added it to the template instead. ([#33539](https://github.com/expo/expo/pull/33539) by [@tsapeta](https://github.com/tsapeta))
+- Drop `fs-extra` in favor of `fs`. ([#35036](https://github.com/expo/expo/pull/35036) by [@kitten](https://github.com/kitten))
+
+## 8.0.30 - 2025-03-31
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.29 - 2025-03-11
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.28 - 2025-02-19
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.27 - 2025-02-14
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.26 - 2025-02-06
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.24 - 2025-01-08
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.23 - 2024-12-10
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.22 - 2024-12-05
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.21 - 2024-11-29
+
+### 💡 Others
+
+- Fixed compatibility for React Native 0.78 nightlies. ([#33306](https://github.com/expo/expo/pull/33306) by [@kudo](https://github.com/kudo))
+
+## 8.0.20 — 2024-11-22
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.19 — 2024-11-22
+
+### 💡 Others
+
+- Added React Native 0.77 support for Kotlin and NDK version bumps. ([#33073](https://github.com/expo/expo/pull/33073) by [@kudo](https://github.com/kudo))
+
+## 8.0.18 — 2024-11-20
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.17 — 2024-11-14
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.16 — 2024-11-14
+
+### 🐛 Bug fixes
+
+- [Android] Fix app icon generation. ([#32908](https://github.com/expo/expo/pull/32908) by [@alanjhughes](https://github.com/alanjhughes))
+
+## 8.0.15 — 2024-11-14
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.14 — 2024-11-13
+
+### 🐛 Bug fixes
+
+- Ensure image resource section exists in `SplashScreen.storyboard`. ([#32858](https://github.com/expo/expo/pull/32858) by [@alanjhughes](https://github.com/alanjhughes))
+
+## 8.0.13 — 2024-11-12
+
+### 💡 Others
+
+- Vary android styles depending on config ([#32776](https://github.com/expo/expo/pull/32776) by [@alanjhughes](https://github.com/alanjhughes))
+
+## 8.0.12 — 2024-11-11
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.11 — 2024-11-11
+
+### 💡 Others
+
+- Improved resolving the path to `expo-modules-autolinking` and removed a peer dependency. ([#32554](https://github.com/expo/expo/pull/32554) by [@tsapeta](https://github.com/tsapeta))
+
+## 8.0.10 — 2024-11-07
+
+### 🐛 Bug fixes
+
+- [android] Fix prebuild error due to float icon coordinates. ([#32649](https://github.com/expo/expo/pull/32649) by [@aleqsio](https://github.com/aleqsio))
+
+## 8.0.9 — 2024-11-06
+
+### 💡 Others
+
+- Rename ios.icon.any to ios.icon.light for consistency with Apple docs ([#32636](https://github.com/expo/expo/pull/32636) by [@brentvatne](https://github.com/brentvatne))
+
+## 8.0.8 — 2024-11-05
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.7 — 2024-10-31
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.6 — 2024-10-31
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.5 — 2024-10-29
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.4 — 2024-10-28
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.3 — 2024-10-25
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.2 — 2024-10-24
+
+_This version does not introduce any user-facing changes._
+
+## 8.0.1 — 2024-10-22
+
+### 💡 Others
+
+- Fixed check-package test errors. ([#32232](https://github.com/expo/expo/pull/32232) by [@kudo](https://github.com/kudo))
+
+## 8.0.0 — 2024-10-22
+
+### 🎉 New features
+
+- Added `ios.developmentTeam` to change the Apple development team id. ([#30761](https://github.com/expo/expo/pull/30761) by [@byCedric](https://github.com/byCedric))
+- Added support for specifying iOS 18+ icon variants. ([#30247](https://github.com/expo/expo/pull/30247) by [@fobos531](https://github.com/fobos531))
+- Added `newArchitecture` prop to app config schema. ([#31963](https://github.com/expo/expo/pull/31963) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+### 🐛 Bug fixes
+
+- Fix empty splash config resulting in build error. ([#29497](https://github.com/expo/expo/pull/29497) by [@aleqsio](https://github.com/aleqsio))
+- Fix incorrect dependency imports. ([#30553](https://github.com/expo/expo/pull/30553) by [@byCedric](https://github.com/byCedric))
+- Replaced the config-plugins deprecated `getAppThemeLightNoActionBarGroup` method with the new `getAppThemeGroup`. ([#30797](https://github.com/expo/expo/pull/30797) by [@zoontek](https://github.com/zoontek))
+
+### ⚠️ Notices
+
+- Added support for React Native 0.76.x. ([#31552](https://github.com/expo/expo/pull/31552) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+## 7.0.8 - 2024-07-11
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.7 - 2024-07-03
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.6 - 2024-06-06
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.5 - 2024-06-05
+
+### 💡 Others
+
+- Pin @react-native subpackage versions to 0.74.83. ([#29441](https://github.com/expo/expo/pull/29441) by [@kudo](https://github.com/kudo))
+
+## 7.0.4 — 2024-05-16
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.3 — 2024-05-02
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.2 — 2024-05-01
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.1 — 2024-04-22
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.0 — 2024-04-19
+
+_This version does not introduce any user-facing changes._
+
+## 7.0.0-beta.0 — 2024-04-17
+
+### 🛠 Breaking changes
+
 - [iOS] remove default APNS entitlement. ([#27924](https://github.com/expo/expo/pull/27924) by [@douglowder](https://github.com/douglowder))
 
 ### 🎉 New features
 
+- Include new privacy info plugin in default plugins. ([#28005](https://github.com/expo/expo/pull/28005) by [@aleqsio](https://github.com/aleqsio))
 - Add default icon on iOS to prevent submission failure when no `icon` is defined. ([#27774](https://github.com/expo/expo/pull/27774) by [@EvanBacon](https://github.com/EvanBacon))
-
-### 🐛 Bug fixes
 
 ### 💡 Others
 
+- Improve config plugin testing. ([#28107](https://github.com/expo/expo/pull/28107) by [@EvanBacon](https://github.com/EvanBacon))
 - Remove classic updates SDK version. ([#26061](https://github.com/expo/expo/pull/26061) by [@wschurman](https://github.com/wschurman))
 - Migrated dependency from `@react-native/normalize-color` to `@react-native/normalize-colors`. ([#27736](https://github.com/expo/expo/pull/27736) by [@kudo](https://github.com/kudo))
 

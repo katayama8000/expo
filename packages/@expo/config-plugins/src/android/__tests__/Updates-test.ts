@@ -45,11 +45,11 @@ describe('Android Updates config', () => {
         policy: 'sdkVersion',
       },
       slug: 'my-app',
-      owner: 'owner',
       updates: {
         enabled: false,
         fallbackToCacheTimeout: 2000,
         checkAutomatically: 'ON_ERROR_RECOVERY',
+        useEmbeddedUpdate: false,
         codeSigningCertificate: 'hello',
         codeSigningMetadata: {
           alg: 'rsa-v1_5-sha256',
@@ -88,6 +88,12 @@ describe('Android Updates config', () => {
     );
     expect(enabled).toHaveLength(1);
     expect(enabled[0].$['android:value']).toMatch('false');
+
+    const hasEmbeddedUpdate = mainApplication['meta-data'].filter(
+      (e) => e.$['android:name'] === 'expo.modules.updates.HAS_EMBEDDED_UPDATE'
+    );
+    expect(hasEmbeddedUpdate).toHaveLength(1);
+    expect(hasEmbeddedUpdate[0].$['android:value']).toMatch('false');
 
     const checkOnLaunch = mainApplication['meta-data'].filter(
       (e) => e.$['android:name'] === 'expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH'
@@ -156,7 +162,6 @@ describe('Android Updates config', () => {
         name: 'foo',
         version: '37.0.0',
         slug: 'my-app',
-        owner: 'owner',
         runtimeVersion: {
           policy: 'appVersion',
         },

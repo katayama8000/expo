@@ -1,4 +1,4 @@
-import { ExpoConfig, getConfig } from '@expo/config';
+import { getConfig } from '@expo/config';
 import chalk from 'chalk';
 
 import { SimulatorAppPrerequisite } from './doctor/apple/SimulatorAppPrerequisite';
@@ -7,17 +7,14 @@ import { validateDependenciesVersionsAsync } from './doctor/dependencies/validat
 import { WebSupportProjectPrerequisite } from './doctor/web/WebSupportProjectPrerequisite';
 import { startInterfaceAsync } from './interface/startInterface';
 import { Options, resolvePortsAsync } from './resolveOptions';
+import * as Log from '../log';
 import { BundlerStartOptions } from './server/BundlerDevServer';
 import { DevServerManager, MultiBundlerStartOptions } from './server/DevServerManager';
 import { openPlatformsAsync } from './server/openPlatforms';
 import { getPlatformBundlers, PlatformBundlers } from './server/platformBundlers';
-import * as Log from '../log';
-import getDevClientProperties from '../utils/analytics/getDevClientProperties';
-import { installExitHooks } from '../utils/exit';
+import { env } from '../utils/env';
 import { isInteractive } from '../utils/interactive';
-import { setNodeEnv } from '../utils/nodeEnv';
 import { profile } from '../utils/profile';
-import { logEventAsync } from '../utils/telemetry';
 
 async function getMultiBundlerStartOptions(
   projectRoot: string,
@@ -70,8 +67,6 @@ export async function startAsync(
 ) {
   Log.log(chalk.gray(`Starting project at ${projectRoot}`));
 
-  setNodeEnv(options.dev ? 'development' : 'production');
-  require('@expo/env').load(projectRoot);
   const { exp, pkg } = profile(getConfig)(projectRoot);
 
   if (exp.platforms?.includes('ios') && process.platform !== 'win32') {
@@ -110,14 +105,8 @@ export async function startAsync(
     await devServerManager.bootstrapTypeScriptAsync();
   }
 
-  if (!settings.webOnly && !options.devClient) {
+  if (!env.EXPO_NO_DEPENDENCY_VALIDATION && !settings.webOnly && !options.devClient) {
     await profile(validateDependenciesVersionsAsync)(projectRoot, exp, pkg);
-  }
-
-  // Some tracking thing
-
-  if (options.devClient) {
-    await trackAsync(projectRoot, exp);
   }
 
   // Open project on devices.
@@ -132,6 +121,10 @@ export async function startAsync(
     // Display the server location in CI...
     const url = devServerManager.getDefaultDevServer()?.getDevServerUrl();
     if (url) {
+      if (env.__EXPO_E2E_TEST) {
+        // Print the URL to stdout for tests
+        console.info(`[__EXPO_E2E_TEST:server] ${JSON.stringify({ url })}`);
+      }
       Log.log(chalk`Waiting on {underline ${url}}`);
     }
   }
@@ -143,18 +136,4 @@ export async function startAsync(
       isInteractive() ? chalk.dim(` Press Ctrl+C to exit.`) : ''
     }`
   );
-}
-
-async function trackAsync(projectRoot: string, exp: ExpoConfig): Promise<void> {
-  await logEventAsync('dev client start command', {
-    status: 'started',
-    ...getDevClientProperties(projectRoot, exp),
-  });
-  installExitHooks(async () => {
-    await logEventAsync('dev client start command', {
-      status: 'finished',
-      ...getDevClientProperties(projectRoot, exp),
-    });
-    // UnifiedAnalytics.flush();
-  });
 }

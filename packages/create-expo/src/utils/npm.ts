@@ -3,11 +3,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { Stream } from 'stream';
-import tar from 'tar';
+import { extract as tarExtract, TarOptionsWithAliases } from 'tar';
 import { promisify } from 'util';
 
 import { env } from './env';
-import { createEntryResolver, createFileTransform } from '../createFileTransform';
+import { createEntryResolver } from '../createFileTransform';
 import { ALIASES } from '../legacyTemplates';
 import { Log } from '../log';
 
@@ -19,7 +19,7 @@ export type ExtractProps = {
   strip?: number;
   fileList?: string[];
   disableCache?: boolean;
-  filter?: tar.ExtractOptions['filter'];
+  filter?: TarOptionsWithAliases['filter'];
 };
 
 // @ts-ignore
@@ -128,11 +128,10 @@ export async function extractNpmTarballAsync(
 
   await pipeline(
     stream,
-    tar.extract(
+    tarExtract(
       {
         cwd,
         filter,
-        transform: createFileTransform(name),
         onentry: createEntryResolver(name),
         strip: strip ?? 1,
       },

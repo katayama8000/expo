@@ -6,6 +6,33 @@
 import EXUpdatesInterface
 import ExpoModulesCore
 
+@objc(EXUpdatesDevLauncherControllerError)
+enum DevLauncherAppControllerError: Int, Error, LocalizedError {
+  case notEnabled
+  case invalidPlist
+  case invalidUpdateURL
+  case invalidRuntimeVersion
+  case updateLaunchFailed
+  case configFailed
+
+  var errorDescription: String? {
+    switch self {
+    case .notEnabled:
+      return "Failed to read stored updates: configuration object is not enabled"
+    case .invalidPlist:
+      return "Failed to read stored updates: invalid Expo.plist"
+    case .invalidUpdateURL:
+      return "Failed to read stored updates: configuration object must include a valid update URL"
+    case .invalidRuntimeVersion:
+      return "Failed to read stored updates: configuration object must include a valid runtime version"
+    case .updateLaunchFailed:
+      return "Failed to launch update with an unknown error"
+    case .configFailed:
+      return "Cannot load configuration from Expo.plist. Please ensure you've followed the setup and installation instructions for expo-updates to create Expo.plist and add it to your Xcode project."
+    }
+  }
+}
+
 /**
  * Main entry point to expo-updates in development builds with expo-dev-client. Similar to EnabledUpdatesController
  * in that it keeps track of updates state, but provides capabilities that are not usually exposed but
@@ -19,8 +46,9 @@ import ExpoModulesCore
 @objc(EXUpdatesDevLauncherController)
 @objcMembers
 public final class DevLauncherAppController: NSObject, InternalAppControllerInterface, UpdatesExternalInterface {
-  public weak var appContext: AppContext?
-  public var shouldEmitJsEvents = false
+  public let eventManager: UpdatesEventManager = NoOpUpdatesEventManager()
+
+  private let logger = UpdatesLogger()
 
   public weak var delegate: AppControllerDelegate?
   public weak var updatesExternalInterfaceDelegate: (any EXUpdatesInterface.UpdatesExternalInterfaceDelegate)?
@@ -33,19 +61,19 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
     launcher?.launchAssetUrl
   }
 
+  public var runtimeVersion: String? {
+    config?.runtimeVersion
+  }
+
+  public var updateURL: URL? {
+    config?.updateUrl
+  }
+
   // swiftlint:disable unavailable_function
   public func start() {
     preconditionFailure("Cannot call start on DevLauncherAppController")
   }
   // swiftlint:enable unavailable_function
-
-  private static let ErrorDomain = "EXUpdatesDevLauncherController"
-
-  enum ErrorCode: Int {
-    case invalidUpdateURL = 1
-    case updateLaunchFailed = 4
-    case configFailed = 5
-  }
 
   private var previousUpdatesConfiguration: UpdatesConfig?
   private var config: UpdatesConfig?
@@ -56,7 +84,7 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
 
   private var launcher: AppLauncher?
   private let controllerQueue = DispatchQueue(label: "expo.controller.ControllerQueue")
-  public private(set) var isStarted: Bool = false
+  public let isActiveController = false
 
   private var _selectionPolicy: SelectionPolicy?
   private var defaultSelectionPolicy: SelectionPolicy
@@ -89,9 +117,12 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
     return launcher.isUsingEmbeddedAssets()
   }
 
+  public func onEventListenerStartObserving() {
+    eventManager.sendStateMachineContextEvent(context: UpdatesStateContext())
+  }
+
   public func reset() {
     self.launcher = nil
-    self.isStarted = true
   }
 
   public func fetchUpdate(
@@ -101,65 +132,11 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
     success successBlock: @escaping UpdatesUpdateSuccessBlock,
     error errorBlock: @escaping UpdatesErrorBlock
   ) {
-    if let directoryDatabaseException = directoryDatabaseException {
-      errorBlock(directoryDatabaseException)
-      return
-    }
-
-    // swiftlint:disable:next identifier_name
-    let updatesConfigurationValidationResult = UpdatesConfig.getUpdatesConfigurationValidationResult(mergingOtherDictionary: configuration)
-    switch updatesConfigurationValidationResult {
-    case .Valid:
-      break
-    case .InvalidNotEnabled:
-      errorBlock(NSError(
-        domain: DevLauncherAppController.ErrorDomain,
-        code: ErrorCode.invalidUpdateURL.rawValue,
-        userInfo: [
-          NSLocalizedDescriptionKey: "Failed to read stored updates: configuration object is not enabled"
-        ]
-      ))
-      return
-    case .InvalidPlistError:
-      errorBlock(NSError(
-        domain: DevLauncherAppController.ErrorDomain,
-        code: ErrorCode.invalidUpdateURL.rawValue,
-        userInfo: [
-          NSLocalizedDescriptionKey: "Failed to read stored updates: invalid Expo.plist"
-        ]
-      ))
-      return
-    case .InvalidMissingURL:
-      errorBlock(NSError(
-        domain: DevLauncherAppController.ErrorDomain,
-        code: ErrorCode.invalidUpdateURL.rawValue,
-        userInfo: [
-          NSLocalizedDescriptionKey: "Failed to read stored updates: configuration object must include a valid update URL"
-        ]
-      ))
-      return
-    case .InvalidMissingRuntimeVersion:
-      errorBlock(NSError(
-        domain: DevLauncherAppController.ErrorDomain,
-        code: ErrorCode.invalidUpdateURL.rawValue,
-        userInfo: [
-          NSLocalizedDescriptionKey: "Failed to read stored updates: configuration object must include a valid runtime version"
-        ]
-      ))
-      return
-    }
-
-    var updatesConfiguration: UpdatesConfig
+    let updatesConfiguration: UpdatesConfig
     do {
-      updatesConfiguration = try UpdatesConfig.configWithExpoPlist(mergingOtherDictionary: configuration)
-    } catch {
-      errorBlock(NSError(
-        domain: DevLauncherAppController.ErrorDomain,
-        code: ErrorCode.configFailed.rawValue,
-        userInfo: [
-          NSLocalizedDescriptionKey: "Cannot load configuration from Expo.plist. Please ensure you've followed the setup and installation instructions for expo-updates to create Expo.plist and add it to your Xcode project."
-        ]
-      ))
+      updatesConfiguration = try createUpdatesConfiguration(configuration)
+    } catch let error {
+      errorBlock(error)
       return
     }
 
@@ -171,6 +148,7 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
 
     let loader = RemoteAppLoader(
       config: updatesConfiguration,
+      logger: self.logger,
       database: self.database,
       directory: self.updatesDirectory!,
       launchedUpdate: nil,
@@ -212,6 +190,16 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
     }
   }
 
+  public func isValidUpdatesConfiguration(_ configuration: [String: Any]) -> Bool {
+    do {
+      _ = try createUpdatesConfiguration(configuration)
+      return true
+    } catch let error {
+      logger.warn(message: "Invalid updates configuration: \(error.localizedDescription)")
+    }
+    return false
+  }
+
   public func selectionPolicy() -> SelectionPolicy {
     if _selectionPolicy == nil {
       _selectionPolicy = defaultSelectionPolicy
@@ -223,6 +211,35 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
   }
   public func resetSelectionPolicyToDefault() {
     _selectionPolicy = nil
+  }
+
+  private func createUpdatesConfiguration(_ configuration: [String: Any]) throws -> UpdatesConfig {
+    if let directoryDatabaseException = directoryDatabaseException {
+      throw directoryDatabaseException
+    }
+
+    // swiftlint:disable:next identifier_name
+    let updatesConfigurationValidationResult = UpdatesConfig.getUpdatesConfigurationValidationResult(mergingOtherDictionary: configuration)
+    switch updatesConfigurationValidationResult {
+    case .Valid:
+      break
+    case .InvalidNotEnabled:
+      throw DevLauncherAppControllerError.notEnabled
+    case .InvalidPlistError:
+      throw DevLauncherAppControllerError.invalidPlist
+    case .InvalidMissingURL:
+      throw DevLauncherAppControllerError.invalidUpdateURL
+    case .InvalidMissingRuntimeVersion:
+      throw DevLauncherAppControllerError.invalidRuntimeVersion
+    }
+
+    let updatesConfiguration: UpdatesConfig
+    do {
+      updatesConfiguration = try UpdatesConfig.configWithExpoPlist(mergingOtherDictionary: configuration)
+    } catch {
+      throw DevLauncherAppControllerError.configFailed
+    }
+    return updatesConfiguration
   }
 
   private func setDevelopmentSelectionPolicy() {
@@ -259,21 +276,17 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
       config: configuration,
       database: self.database,
       directory: self.updatesDirectory!,
-      completionQueue: self.controllerQueue
+      completionQueue: self.controllerQueue,
+      logger: self.logger
     )
     launcher.launchUpdate(withSelectionPolicy: self.selectionPolicy()) { error, success in
       if !success {
         // reset controller's configuration to what it was before this request
         self.config = self.previousUpdatesConfiguration!
-        errorBlock(error ?? NSError(
-          domain: DevLauncherAppController.ErrorDomain,
-          code: ErrorCode.updateLaunchFailed.rawValue,
-          userInfo: [NSLocalizedDescriptionKey: "Failed to launch update with an unknown error"]
-        ))
+        errorBlock(error ?? DevLauncherAppControllerError.updateLaunchFailed)
         return
       }
 
-      self.isStarted = true
       self.launcher = launcher
       successBlock(launcher.launchedUpdate?.manifest.rawManifestJSON())
       self.runReaper()
@@ -289,7 +302,8 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
         database: database,
         directory: updatesDirectory,
         selectionPolicy: selectionPolicy(),
-        launchedUpdate: launchedUpdate
+        launchedUpdate: launchedUpdate,
+        logger: self.logger
       )
     }
   }
@@ -297,6 +311,7 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
   public func getConstantsForModule() -> UpdatesModuleConstants {
     return UpdatesModuleConstants(
       launchedUpdate: launcher?.launchedUpdate,
+      launchDuration: nil,
       embeddedUpdate: nil, // no embedded update in debug builds
       emergencyLaunchException: self.directoryDatabaseException,
       isEnabled: true,
@@ -305,7 +320,8 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
       checkOnLaunch: self.config?.checkOnLaunch ?? CheckAutomaticallyConfig.Always,
       requestHeaders: self.config?.requestHeaders ?? [:],
       assetFilesMap: assetFilesMap(),
-      shouldDeferToNativeForAPIMethodAvailabilityInDevelopment: true
+      shouldDeferToNativeForAPIMethodAvailabilityInDevelopment: true,
+      initialContext: UpdatesStateContext()
     )
   }
 
@@ -331,8 +347,8 @@ public final class DevLauncherAppController: NSObject, InternalAppControllerInte
     errorBlockArg(NotAvailableInDevClientException("Updates.setExtraParamAsync()"))
   }
 
-  public func getNativeStateMachineContext(success successBlockArg: @escaping (UpdatesStateContext) -> Void, error errorBlockArg: @escaping (ExpoModulesCore.Exception) -> Void) {
-    successBlockArg(UpdatesStateContext())
+  public func setUpdateURLAndRequestHeadersOverride(_ configOverride: UpdatesConfigOverride?) throws {
+    throw NotAvailableInDevClientException("Updates.setUpdateURLAndRequestHeadersOverride() is not supported in development builds.")
   }
 }
 

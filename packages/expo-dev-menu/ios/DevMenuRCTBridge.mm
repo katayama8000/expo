@@ -2,6 +2,9 @@
 
 #import <EXDevMenu/DevMenuRCTBridge.h>
 
+#import <EXDevMenu/DevClientNoOpLoadingView.h>
+#import <EXDevMenu/DevMenuRCTDevSettings.h>
+
 // The search path for the Swift generated headers are different
 // between use_frameworks and non_use_frameworks mode.
 #if __has_include(<EXDevMenuInterface/EXDevMenuInterface-Swift.h>)
@@ -76,15 +79,11 @@
     @"EXNativeModulesProxy",
     @"EXReactNativeEventEmitter",
     @"ExpoModulesCore",
-    @"ViewManagerAdapter_"
+    @"ViewManagerAdapter_",
+    @"EXDevLauncherDevMenu"
   ];
   NSArray<Class> *filteredModuleList = [modules filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id  _Nullable clazz, NSDictionary<NSString *,id> * _Nullable bindings) {
     NSString* clazzName = NSStringFromClass(clazz);
-
-    if ([clazz conformsToProtocol:@protocol(EXDevExtensionProtocol)]) {
-      return true;
-    }
-
     for (NSString *allowedModule in allowedModules) {
       if ([clazzName hasPrefix:allowedModule]) {
         return true;
@@ -121,35 +120,38 @@
 
 @end
 
-@interface DevClientAppDelegate (DevMenuRCTAppDelegate)
+@interface RCTAppDelegate ()
 
-#ifdef __cplusplus
-- (std::unique_ptr<facebook::react::JSExecutorFactory>)jsExecutorFactoryForBridge:(RCTBridge *)bridge;
-#endif
+- (Class)getModuleClassFromName:(const char *)name;
+
 @end
 
-@implementation DevMenuRCTAppDelegate
+@interface DevClientReactNativeFactoryDelegate (DevMenuRCTAppDelegate)
 
+@end
+
+@implementation DevMenuReactNativeFactoryDelegate
 
 - (RCTBridge *)createBridgeWithDelegate:(id<RCTBridgeDelegate>)delegate launchOptions:(NSDictionary *)launchOptions
 {
   return [[DevMenuRCTBridge alloc] initWithDelegate:delegate launchOptions:launchOptions];
 }
 
-#pragma mark - RCTCxxBridgeDelegate
-- (std::unique_ptr<facebook::react::JSExecutorFactory>)jsExecutorFactoryForBridge:(RCTBridge *)bridge
+- (NSArray<id<RCTBridgeModule>> *)extraModulesForBridge:(RCTBridge *)bridge
 {
-    std::unique_ptr<facebook::react::JSExecutorFactory> executorFactory  = [super jsExecutorFactoryForBridge:bridge];
+  NSMutableArray<id<RCTBridgeModule>> *modules = [NSMutableArray new];
+  [modules addObject:[[DevClientNoOpLoadingView alloc] init]];
+  [modules addObject:[[DevMenuRCTDevSettings alloc] init]];
 
-    #if __has_include(<reacthermes/HermesExecutorFactory.h>)
-        auto rawExecutorFactory = executorFactory.get();
-        auto hermesExecFactory = dynamic_cast<facebook::react::HermesExecutorFactory*>(rawExecutorFactory);
-        if (hermesExecFactory != nullptr) {
-            hermesExecFactory->setEnableDebugger(false);
-        }
-    #endif
+  return modules;
+}
 
-    return executorFactory;
+- (Class)getModuleClassFromName:(const char *)name {
+  // Overrides DevLoadingView ("Connect to Metro to develop JavaScript") as no-op for dev menu
+  if (strcmp(name, "DevLoadingView") == 0) {
+    return [DevClientNoOpLoadingView class];
+  }
+  return [super getModuleClassFromName:name];
 }
 
 @end

@@ -1,7 +1,23 @@
-import { PermissionResponse, PermissionStatus, UnavailabilityError, uuid } from 'expo-modules-core';
+import {
+  PermissionResponse,
+  PermissionStatus,
+  PermissionExpiration,
+  UnavailabilityError,
+  uuid,
+} from 'expo-modules-core';
 import { Platform, Share, type ShareOptions } from 'react-native';
 
 import ExpoContacts from './ExpoContacts';
+
+export type ContactsPermissionResponse = PermissionResponse & {
+  /**
+   * Indicates if your app has access to the whole or only part of the contact library. Possible values are:
+   * - `'all'` if the user granted your app access to the whole contact library
+   * - `'limited'` if the user granted your app access only to selected contacts (only available on iOS 18+)
+   * - `'none'`
+   */
+  accessPrivileges?: 'all' | 'limited' | 'none';
+};
 
 export type CalendarFormatType = CalendarFormats | `${CalendarFormats}`;
 
@@ -15,11 +31,11 @@ export type Date = {
   /**
    * Day.
    */
-  day?: number;
+  day: number;
   /**
    * Month - adjusted for JavaScript `Date` which starts at `0`.
    */
-  month?: number;
+  month: number;
   /**
    * Year.
    */
@@ -31,9 +47,9 @@ export type Date = {
   /**
    * Localized display name.
    */
-  label: string;
+  label?: string;
   /**
-   * Format for the input date.
+   * Format for the date. This is provided by the OS, do not set this manually.
    */
   format?: CalendarFormatType;
 };
@@ -278,11 +294,11 @@ export type Contact = {
    */
   maidenName?: string;
   /**
-   * Dr. Mr. Mrs. ect…
+   * Dr., Mr., Mrs., and so on.
    */
   namePrefix?: string;
   /**
-   * Jr. Sr. ect…
+   * Jr., Sr., and so on.
    */
   nameSuffix?: string;
   /**
@@ -374,6 +390,11 @@ export type Contact = {
    * @platform ios
    */
   socialProfiles?: SocialProfile[];
+  /**
+   * Whether the contact is starred.
+   * @platform android
+   */
+  isFavorite?: boolean;
 };
 
 /**
@@ -550,7 +571,7 @@ export type Container = {
   type: ContainerType;
 };
 
-export { PermissionStatus, PermissionResponse };
+export { PermissionStatus, PermissionResponse, PermissionExpiration };
 
 /**
  * Returns whether the Contacts API is enabled on the current device. This method does not check the app permissions.
@@ -643,7 +664,7 @@ export async function getContactByIdAsync(
   }
 
   if (id == null) {
-    throw new Error('Error: Contacts.getContactByIdAsync: Please pass an ID as a parameter');
+    throw new Error('Error: Contacts.getContactByIdAsync: id is required');
   } else {
     const results = await ExpoContacts.getContactsAsync({
       pageSize: 1,
@@ -681,14 +702,12 @@ export async function addContactAsync(contact: Contact, containerId?: string): P
   }
 
   const noIdContact = removeIds(contact);
-
   return await ExpoContacts.addContactAsync(noIdContact, containerId);
 }
 
 /**
  * Mutate the information of an existing contact. Due to an iOS bug, `nonGregorianBirthday` field cannot be modified.
- * > **info** On Android, you can use [`presentFormAsync`](#contactspresentformasynccontactid-contact-formoptions) to make edits to contacts.
- * @param contact A contact object including the wanted changes.
+ * @param contact A contact object including the wanted changes. Contact `id` is required.
  * @return A promise that fulfills with ID of the updated system contact if mutation was successful.
  * @example
  * ```js
@@ -699,9 +718,10 @@ export async function addContactAsync(contact: Contact, containerId?: string): P
  * };
  * await Contacts.updateContactAsync(contact);
  * ```
- * @platform ios
  */
-export async function updateContactAsync(contact: Contact): Promise<string> {
+export async function updateContactAsync(
+  contact: { id: string } & Partial<Omit<Contact, 'id'>>
+): Promise<string> {
   if (!ExpoContacts.updateContactAsync) {
     throw new UnavailabilityError('Contacts', 'updateContactAsync');
   }
@@ -945,8 +965,8 @@ export async function getGroupsAsync(groupQuery: GroupQuery): Promise<Group[]> {
 
 /**
  * Presents a native contact picker to select a single contact from the system. On Android, the `READ_CONTACTS` permission is required. You can
- * obtain this permission by calling the [Contacts.requestPermissionsAsync()](#contactsrequestpermissionsasync) method. On iOS, no permissions are 
- * required to use this method. 
+ * obtain this permission by calling the [`Contacts.requestPermissionsAsync()`](#contactsrequestpermissionsasync) method. On iOS, no permissions are
+ * required to use this method.
  * @return A promise that fulfills with a single `Contact` object if a contact is selected or `null` if no contact is selected (when selection is canceled).
  */
 export async function presentContactPickerAsync(): Promise<Contact | null> {
@@ -995,9 +1015,9 @@ export async function getContainersAsync(containerQuery: ContainerQuery): Promis
 
 /**
  * Checks user's permissions for accessing contacts data.
- * @return A promise that resolves to a [PermissionResponse](#permissionresponse) object.
+ * @return A promise that resolves to a [ContactsPermissionResponse](#contactspermissionresponse) object.
  */
-export async function getPermissionsAsync(): Promise<PermissionResponse> {
+export async function getPermissionsAsync(): Promise<ContactsPermissionResponse> {
   if (!ExpoContacts.getPermissionsAsync) {
     throw new UnavailabilityError('Contacts', 'getPermissionsAsync');
   }
@@ -1007,14 +1027,25 @@ export async function getPermissionsAsync(): Promise<PermissionResponse> {
 
 /**
  * Asks the user to grant permissions for accessing contacts data.
- * @return A promise that resolves to a [PermissionResponse](#permissionresponse) object.
+ * @return A promise that resolves to a [ContactsPermissionResponse](#contactspermissionresponse) object.
  */
-export async function requestPermissionsAsync(): Promise<PermissionResponse> {
+export async function requestPermissionsAsync(): Promise<ContactsPermissionResponse> {
   if (!ExpoContacts.requestPermissionsAsync) {
     throw new UnavailabilityError('Contacts', 'requestPermissionsAsync');
   }
 
   return await ExpoContacts.requestPermissionsAsync();
+}
+
+/**
+ * Presents a modal which allows the user to select which contacts the app has access to.
+ * Using this function is reasonable only when the app has "limited" permissions.
+ * @return A promise that resolves with an array of contact identifiers that were newly granted to the app.
+ * Contacts which the app lost access to are not listed. On platforms other than iOS and below 18.0, the promise rejects immediately.
+ * @platform ios 18.0+
+ */
+export async function presentAccessPickerAsync(): Promise<string[]> {
+  return await ExpoContacts.presentAccessPickerAsync();
 }
 
 /** @private */
@@ -1028,9 +1059,11 @@ function removeIds(contact: Contact): Contact {
   }
 
   for (const key of Object.keys(contact)) {
-    if (Array.isArray(contact[key])) {
-      updatedContact[key] = contact[key].map((item, index) => {
-        if (item.id) {
+    const prop = key as keyof Contact;
+    const value = contact[prop];
+    if (Array.isArray(value)) {
+      (updatedContact as any)[prop] = value.map((item, index) => {
+        if (typeof item === 'object' && item != null && 'id' in item) {
           __DEV__ &&
             console.warn(
               `You have set an id "${item.id}" at index "${index}" for the key "${key}" of the contact. This value will be ignored, because the id will be generated by the OS`
@@ -1085,6 +1118,10 @@ export enum Fields {
   Note = 'note',
   Dates = 'dates',
   Relationships = 'relationships',
+  /**
+   * @platform android
+   */
+  IsFavorite = 'isFavorite',
 }
 
 /**

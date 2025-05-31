@@ -1,4 +1,23 @@
-import * as Linking from 'expo-linking';
+export function parsePathAndParamsFromExpoGoLink(url: string): {
+  pathname: string;
+  queryString: string;
+} {
+  // If the URL is defined (default in Expo Go dev apps) and the URL has no path:
+  // `exp://192.168.87.39:19000/` then use the default `exp://192.168.87.39:19000/--/`
+
+  const href = parsePathFromExpoGoLink(url);
+  const results = href.match(/([^?]*)(\?.*)?/);
+  return {
+    pathname: results?.[1] ?? '',
+    queryString: results?.[2] ?? '',
+  };
+}
+
+export function parsePathFromExpoGoLink(url: string): string {
+  // If the URL is defined (default in Expo Go dev apps) and the URL has no path:
+  // `exp://192.168.87.39:19000/` then use the default `exp://192.168.87.39:19000/--/`
+  return url.match(/exps?:\/\/.*?\/--\/(.*)/)?.[1] ?? '';
+}
 
 // This is only run on native.
 function extractExactPathFromURL(url: string): string {
@@ -7,7 +26,14 @@ function extractExactPathFromURL(url: string): string {
     // from the URL, while stripping the origin.
     url.match(/^https?:\/\//)
   ) {
-    const { origin, href } = new URL(url);
+    const { origin, href, hostname } = new URL(url);
+
+    if (hostname === 'exp.host' || hostname === 'u.expo.dev') {
+      // These are QR code generate deep-link that always like to the '/' path
+      // TODO: In the future, QR code may link to a specific path and this logic will need to be udpated
+      return '';
+    }
+
     return href.replace(origin, '');
   }
 
@@ -20,21 +46,17 @@ function extractExactPathFromURL(url: string): string {
     // are passed through to other apps in Expo Go.
     url.match(/^exp(s)?:\/\//)
   ) {
-    const pathname = url.match(/exps?:\/\/.*?\/--\/(.*)/)?.[1];
+    const pathname = parsePathFromExpoGoLink(url);
     if (pathname) {
       return fromDeepLink('a://' + pathname);
     }
+    // Match the `?.*` segment of the URL.
+    const queryParams = url.match(/exps?:\/\/.*\?(.*)/)?.[1];
+    if (queryParams) {
+      return fromDeepLink('a://?' + queryParams);
+    }
 
-    const res = Linking.parse(url);
-
-    const qs = !res.queryParams
-      ? ''
-      : Object.entries(res.queryParams)
-          .map(([k, v]) => `${k}=${v}`)
-          .join('&');
-    return (
-      adjustPathname({ hostname: res.hostname, pathname: res.path || '' }) + (qs ? '?' + qs : '')
-    );
+    return '';
   }
 
   // TODO: Support dev client URLs
@@ -48,13 +70,23 @@ function isExpoDevelopmentClient(url: URL): boolean {
 }
 
 function fromDeepLink(url: string): string {
-  let res: URL;
+  let res: URL | null;
   try {
     // This is for all standard deep links, e.g. `foobar://` where everything
     // after the `://` is the path.
     res = new URL(url);
   } catch {
-    return url;
+    /**
+     * We failed to parse the URL. This can occur for a variety of reasons, including:
+     * - Its a partial URL (e.g. `/route?query=param`).
+     * - It has a valid App scheme, but the scheme isn't a valid URL scheme (e.g. `my_app://`)
+     */
+
+    /**
+     * App schemes are not valid URL schemes, so they will fail to parse.
+     * We need to strip the scheme from these URLs
+     */
+    return url.replace(/^[^:]+:\/\//, '');
   }
 
   if (isExpoDevelopmentClient(res)) {
@@ -87,15 +119,10 @@ function fromDeepLink(url: string): string {
   return results;
 }
 
-export function extractExpoPathFromURL(url: string = '') {
-  // TODO: We should get rid of this, dropping specificities is not good
-  return extractExactPathFromURL(url).replace(/^\//, '');
-}
-
-export function adjustPathname(url: { hostname?: string | null; pathname: string }) {
-  if (url.hostname === 'exp.host' || url.hostname === 'u.expo.dev') {
-    // drop the first two segments from pathname:
-    return url.pathname.split('/').slice(2).join('/');
-  }
-  return url.pathname;
+export function extractExpoPathFromURL(_prefixes: string[], url: string = '') {
+  return (
+    extractExactPathFromURL(url)
+      // TODO: We should get rid of this, dropping specificities is not good
+      .replace(/^\//, '')
+  );
 }

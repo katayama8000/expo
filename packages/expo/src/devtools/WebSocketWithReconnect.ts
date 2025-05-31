@@ -1,4 +1,4 @@
-import { EventEmitter, type EventSubscription } from 'fbemitter';
+import type { DevToolsPluginClientOptions } from './devtools.types';
 
 export interface Options {
   /**
@@ -29,6 +29,19 @@ export interface Options {
    * @default no-op
    */
   onReconnect?: (reason: string) => void;
+
+  /**
+   * The [`binaryType`](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/binaryType).
+   */
+  binaryType?: DevToolsPluginClientOptions['websocketBinaryType'];
+}
+
+interface InternalEventListeners {
+  message?: Set<(event: WebSocketMessageEvent) => void>;
+  open?: Set<() => void>;
+  error?: Set<(event: WebSocketErrorEvent) => void>;
+  close?: Set<(event: WebSocketCloseEvent) => void>;
+  [eventName: string]: undefined | Set<(event: any) => void>;
 }
 
 export class WebSocketWithReconnect implements WebSocket {
@@ -44,9 +57,9 @@ export class WebSocketWithReconnect implements WebSocket {
   private isClosed = false;
   private sendQueue: (string | ArrayBufferView | Blob | ArrayBufferLike)[] = [];
   private lastCloseEvent: { code?: number; reason?: string; message?: string } | null = null;
+  private eventListeners: InternalEventListeners;
 
-  private readonly emitter = new EventEmitter();
-  private readonly eventSubscriptions: EventSubscription[] = [];
+  private readonly wsBinaryType?: Options['binaryType'];
 
   constructor(
     public readonly url: string,
@@ -61,23 +74,25 @@ export class WebSocketWithReconnect implements WebSocket {
         throw error;
       });
     this.onReconnect = options?.onReconnect ?? (() => {});
+    this.wsBinaryType = options?.binaryType;
+    this.eventListeners = Object.create(null);
 
     this.connect();
   }
 
   public close(code?: number, reason?: string) {
     this.clearConnectTimeoutIfNeeded();
-    this.emitter.emit(
+    this.emitEvent(
       'close',
-      this.lastCloseEvent ?? {
+      (this.lastCloseEvent ?? {
         code: code ?? 1000,
         reason: reason ?? 'Explicit closing',
         message: 'Explicit closing',
-      }
+      }) as WebSocketCloseEvent
     );
     this.lastCloseEvent = null;
     this.isClosed = true;
-    this.emitter.removeAllListeners();
+    this.eventListeners = Object.create(null);
     this.sendQueue = [];
     if (this.ws != null) {
       const ws = this.ws;
@@ -91,17 +106,12 @@ export class WebSocketWithReconnect implements WebSocket {
   public addEventListener(event: 'error', listener: (event: WebSocketErrorEvent) => void): void;
   public addEventListener(event: 'close', listener: (event: WebSocketCloseEvent) => void): void;
   public addEventListener(event: string, listener: (event: any) => void) {
-    this.eventSubscriptions.push(this.emitter.addListener(event, listener));
+    const listeners = this.eventListeners[event] || (this.eventListeners[event] = new Set());
+    listeners.add(listener);
   }
 
   public removeEventListener(event: string, listener: (event: any) => void) {
-    const index = this.eventSubscriptions.findIndex(
-      (subscription) => subscription.listener === listener
-    );
-    if (index >= 0) {
-      this.eventSubscriptions[index].remove();
-      this.eventSubscriptions.splice(index, 1);
-    }
+    this.eventListeners[event]?.delete(listener);
   }
 
   //#region Internals
@@ -113,6 +123,9 @@ export class WebSocketWithReconnect implements WebSocket {
     this.connectTimeoutHandle = setTimeout(this.handleConnectTimeout, this.connectTimeout);
 
     this.ws = new WebSocket(this.url.toString());
+    if (this.wsBinaryType != null) {
+      this.ws.binaryType = this.wsBinaryType;
+    }
     this.ws.addEventListener('message', this.handleMessage);
     this.ws.addEventListener('open', this.handleOpen);
     // @ts-ignore TypeScript expects (e: Event) => any, but we want (e: WebSocketErrorEvent) => any
@@ -141,10 +154,23 @@ export class WebSocketWithReconnect implements WebSocket {
     }
   }
 
+  private emitEvent(event: 'message', payload: WebSocketMessageEvent): void;
+  private emitEvent(event: 'open', payload?: void): void;
+  private emitEvent(event: 'error', payload: WebSocketErrorEvent): void;
+  private emitEvent(event: 'close', payload: WebSocketCloseEvent): void;
+  private emitEvent(event: string, payload: any) {
+    const listeners = this.eventListeners[event];
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(payload);
+      }
+    }
+  }
+
   private handleOpen = () => {
     this.clearConnectTimeoutIfNeeded();
     this.lastCloseEvent = null;
-    this.emitter.emit('open');
+    this.emitEvent('open');
 
     const sendQueue = this.sendQueue;
     this.sendQueue = [];
@@ -154,12 +180,12 @@ export class WebSocketWithReconnect implements WebSocket {
   };
 
   private handleMessage = (event: WebSocketMessageEvent) => {
-    this.emitter.emit('message', event);
+    this.emitEvent('message', event);
   };
 
   private handleError = (event: WebSocketErrorEvent) => {
     this.clearConnectTimeoutIfNeeded();
-    this.emitter.emit('error', event);
+    this.emitEvent('error', event);
     this.reconnectIfNeeded(`WebSocket error - ${event.message}`);
   };
 
@@ -210,9 +236,14 @@ export class WebSocketWithReconnect implements WebSocket {
     try {
       ws.removeEventListener('message', this.handleMessage);
       ws.removeEventListener('open', this.handleOpen);
-      // @ts-ignore: TypeScript expects (e: Event) => any, but we want (e: WebSocketErrorEvent) => any
-      ws.removeEventListener('error', this.handleError);
       ws.removeEventListener('close', this.handleClose);
+
+      // WebSocket throws errors if we don't handle the error event.
+      // Specifically when closing a ws in CONNECTING readyState,
+      // WebSocket will have `WebSocket was closed before the connection was established` error.
+      // We won't like to have the exception, so set a noop error handler.
+      ws.onerror = () => {};
+
       ws.close();
     } catch {}
   }
@@ -267,19 +298,19 @@ export class WebSocketWithReconnect implements WebSocket {
 
   //#regions Unsupported legacy properties
 
-  public set onclose(value: ((e: WebSocketCloseEvent) => any) | null) {
+  public set onclose(_value: ((e: WebSocketCloseEvent) => any) | null) {
     throw new Error('Unsupported legacy property, use addEventListener instead');
   }
 
-  public set onerror(value: ((e: Event) => any) | null) {
+  public set onerror(_value: ((e: Event) => any) | null) {
     throw new Error('Unsupported legacy property, use addEventListener instead');
   }
 
-  public set onmessage(value: ((e: WebSocketMessageEvent) => any) | null) {
+  public set onmessage(_value: ((e: WebSocketMessageEvent) => any) | null) {
     throw new Error('Unsupported legacy property, use addEventListener instead');
   }
 
-  public set onopen(value: (() => any) | null) {
+  public set onopen(_value: (() => any) | null) {
     throw new Error('Unsupported legacy property, use addEventListener instead');
   }
 

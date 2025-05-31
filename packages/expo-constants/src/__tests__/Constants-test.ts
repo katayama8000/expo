@@ -61,25 +61,28 @@ describe(`manifest`, () => {
     });
   }
 
-  function mockNativeModulesProxy(mockValues: object) {
+  function mockNativeModulesProxy(mockValues: Record<string, any>) {
     jest.doMock('expo-modules-core', () => {
       const ExpoModulesCore = jest.requireActual('expo-modules-core');
       return {
         ...ExpoModulesCore,
-        NativeModulesProxy: {
-          ...(ExpoModulesCore.NativeModulesProxy ?? {}),
-          ...mockValues,
+        requireOptionalNativeModule(moduleName: string) {
+          if (Object.keys(mockValues).includes(moduleName)) {
+            return mockValues[moduleName];
+          }
+
+          return jest.requireActual('expo-modules-core').requireOptionalNativeModule(moduleName);
         },
       };
     });
   }
 
-  function mockExpoUpdates(mockValues: object) {
+  function mockExpoUpdates(mockValues: Record<string, any>) {
     jest.doMock('expo-modules-core', () => {
       const ExpoModulesCore = jest.requireActual('expo-modules-core');
       return {
         ...ExpoModulesCore,
-        requireOptionalNativeModule(moduleName) {
+        requireOptionalNativeModule(moduleName: string) {
           if (moduleName !== 'ExpoUpdates') {
             return jest.requireActual('expo-modules-core').requireOptionalNativeModule(moduleName);
           }

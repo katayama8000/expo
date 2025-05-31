@@ -6,9 +6,119 @@
 
 ### 🎉 New features
 
+### 🐛 Bug fixes
+
+### 💡 Others
+
+## 5.0.4 — 2025-04-28
+
+### 💡 Others
+
+- Move virtual RSC client boundary entry point to `expo`. ([#36408](https://github.com/expo/expo/pull/36408) by [@EvanBacon](https://github.com/EvanBacon))
+- Remove `/symbolicate` import. ([#36409](https://github.com/expo/expo/pull/36409) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 5.0.3 — 2025-04-28
+
+### 💡 Others
+
+- Remove `web-streams-polyfill` in favor of `expo` support. ([#36407](https://github.com/expo/expo/pull/36407) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 5.0.2 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 5.0.1 — 2025-04-09
+
+_This version does not introduce any user-facing changes._
+
+## 5.0.0 — 2025-04-04
+
+### 🛠 Breaking changes
+
+- Remove global polyfill for deprecated `setImmediate` function. ([#35373](https://github.com/expo/expo/pull/35373) by [@EvanBacon](https://github.com/EvanBacon))
+
+### 🐛 Bug fixes
+
+- Parse errors with Babel code frames as syntax errors on Windows. ([#34017](https://github.com/expo/expo/pull/34017) by [@byCedric](https://github.com/byCedric))
+- Fixed broken async import. ([#34824](https://github.com/expo/expo/pull/34824) by [@kudo](https://github.com/kudo))
+
+### 💡 Others
+
+- Remove unused log. ([#35894](https://github.com/expo/expo/pull/35894) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 4.0.1 - 2025-01-19
+
+### 🐛 Bug fixes
+
+- Only reload RSC for a given platform. ([#34216](https://github.com/expo/expo/pull/34216) by [@EvanBacon](https://github.com/EvanBacon))
+
+### 💡 Others
+
+- fix: add e2e testing to server function errors ([#33971](https://github.com/expo/expo/pull/33971) by [@EvanBacon](https://github.com/EvanBacon))
+- Use `window.location` polyfill for server requests. ([#32099](https://github.com/expo/expo/pull/32099) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 4.0.0 — 2024-11-11
+
+_This version does not introduce any user-facing changes._
+
+## 4.0.0-preview.2 — 2024-11-05
+
+### 💡 Others
+
+- Use `window.location` polyfill for server requests. ([#32099](https://github.com/expo/expo/pull/32099) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 4.0.0-preview.1 — 2024-11-04
+
+### 💡 Others
+
+- Move server action env to `@expo/metro-runtime`. ([#32597](https://github.com/expo/expo/pull/32597) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 4.0.0-preview.0 — 2024-10-22
+
+### 🎉 New features
+
+- Enable relative fetch requests by default. ([#31707](https://github.com/expo/expo/pull/31707) by [@EvanBacon](https://github.com/EvanBacon))
+- Add support for CSS in server components. ([#31073](https://github.com/expo/expo/pull/31073) by [@EvanBacon](https://github.com/EvanBacon))
+- Add initial version of DOM Components. ([#30938](https://github.com/expo/expo/pull/30938) by [@EvanBacon](https://github.com/EvanBacon))
+- Add server HMR for native. ([#30334](https://github.com/expo/expo/pull/30334) by [@EvanBacon](https://github.com/EvanBacon))
+- Add streaming fetch polyfill. ([#30334](https://github.com/expo/expo/pull/30334) by [@EvanBacon](https://github.com/EvanBacon))
+- Use `src` directory for source code. ([#30300](https://github.com/expo/expo/pull/30300) by [@EvanBacon](https://github.com/EvanBacon))
+- Always enable async bundle loading on native. ([#30146](https://github.com/expo/expo/pull/30146) by [@EvanBacon](https://github.com/EvanBacon))
+- Support `location.reload()` in native production builds. ([#29572](https://github.com/expo/expo/pull/29572) by [@EvanBacon](https://github.com/EvanBacon))
+
+### 🐛 Bug fixes
+
+- Fix logbox usage on native for router errors. ([#30651](https://github.com/expo/expo/pull/30651) by [@EvanBacon](https://github.com/EvanBacon))
+- Update DevLoadingView on native. ([#30606](https://github.com/expo/expo/pull/30606) by [@EvanBacon](https://github.com/EvanBacon))
+- Fix metro symbolication issue with web import errors. ([#30544](https://github.com/expo/expo/pull/30544) by [@EvanBacon](https://github.com/EvanBacon))
+- Remount the failed component when a refresh event occurs. ([#30544](https://github.com/expo/expo/pull/30544) by [@EvanBacon](https://github.com/EvanBacon))
+- Fix web styling bug. ([#30438](https://github.com/expo/expo/pull/30438) by [@EvanBacon](https://github.com/EvanBacon))
+- Fix exceptions native import. ([#30433](https://github.com/expo/expo/pull/30433) by [@EvanBacon](https://github.com/EvanBacon))
+- Improve error message for `window.location` polyfill. ([#30331](https://github.com/expo/expo/pull/30331) by [@EvanBacon](https://github.com/EvanBacon))
+- Prevent `LogBoxStateSubscription` calling `setState` while rendering a `<Suspense />` boundary. ([#32047](https://github.com/expo/expo/pull/32047) by [@marklawlor](https://github.com/marklawlor))
+
+### 💡 Others
+
+- Improve API route errors ([#31485](https://github.com/expo/expo/pull/31485) by [@EvanBacon](https://github.com/EvanBacon))
+- Remove downloading indicator for split bundles. ([#30146](https://github.com/expo/expo/pull/30146) by [@EvanBacon](https://github.com/EvanBacon))
+
+## 3.2.3 - 2024-08-14
+
+_This version does not introduce any user-facing changes._
+
+## 3.2.1 — 2024-04-23
+
+_This version does not introduce any user-facing changes._
+
+## 3.2.0 — 2024-04-18
+
+### 🎉 New features
+
 - Mark React client components with "use client" directives. ([#27300](https://github.com/expo/expo/pull/27300) by [@EvanBacon](https://github.com/EvanBacon))
 
 ### 🐛 Bug fixes
+
+- Fix async loader for web being able to reload the entrypoint bundle. ([#28016](https://github.com/expo/expo/pull/28016) by [@kitten](https://github.com/kitten))
 
 ### 💡 Others
 

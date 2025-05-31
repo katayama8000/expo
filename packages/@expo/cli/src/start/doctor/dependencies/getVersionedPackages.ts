@@ -54,6 +54,11 @@ export async function getCombinedKnownVersionsAsync({
     Log.warn('Dependency validation might be unreliable when using canary SDK versions');
   }
 
+  if (env.EXPO_NO_DEPENDENCY_VALIDATION) {
+    debug('Dependency validation is disabled through EXPO_NO_DEPENDENCY_VALIDATION=1');
+    return {};
+  }
+
   const bundledNativeModules = sdkVersion
     ? await getVersionedNativeModulesAsync(projectRoot, sdkVersion, { skipRemoteVersions })
     : {};
@@ -151,14 +156,14 @@ export async function getVersionedPackagesAsync(
       // Unimodule packages from npm registry are modified to use the bundled version.
       // Some packages have the recommended version listed in https://exp.host/--/api/v2/versions.
       const isExcludedFromValidation = pkg?.expo?.install?.exclude?.includes(name);
-      const hasSpecifiedExactVersion = rawSpec !== '';
+      const hasSpecifiedExactVersion = rawSpec !== '' && rawSpec !== '*';
       if (isExcludedFromValidation || hasSpecifiedExactVersion) {
         othersCount++;
         excludedNativeModules.push({
           name,
           bundledNativeVersion: versionsForSdk[name],
           isExcludedFromValidation,
-          specifiedVersion: rawSpec,
+          specifiedVersion: hasSpecifiedExactVersion ? rawSpec : '',
         });
         return raw;
       }

@@ -8,7 +8,7 @@ import {
 } from '@expo/config-plugins';
 import JsonFile from '@expo/json-file';
 import plist from '@expo/plist';
-import fs from 'fs-extra';
+import fsMock from 'fs';
 import { vol } from 'memfs';
 import * as path from 'path';
 import xcode from 'xcode';
@@ -24,7 +24,9 @@ import {
 const { withOrientation } = IOSConfig.Orientation;
 
 const { readXMLAsync } = XML;
-const fsReal = jest.requireActual('fs') as typeof fs;
+const fsReal = jest.requireActual<typeof import('fs')>('fs');
+
+jest.setTimeout(30 * 1000);
 
 jest.mock('fs');
 // Weird issues with Android Icon module make it hard to mock test.
@@ -36,8 +38,6 @@ jest.mock('../icons/withAndroidIcons', () => {
     setIconAsync() {},
   };
 });
-const NotificationsPlugin = require('../unversioned/expo-notifications/withAndroidNotifications');
-NotificationsPlugin.withNotificationIcons = jest.fn((config) => config);
 
 function getLargeConfig(): ExportedConfig {
   // A very extensive Expo Config.
@@ -45,7 +45,6 @@ function getLargeConfig(): ExportedConfig {
     name: 'my cool app',
     slug: 'mycoolapp',
     description: 'my app is great because it uses expo',
-    // owner?: string;
     // privacy?: 'public' | 'unlisted' | 'hidden';
     // sdkVersion?: string;
     runtimeVersion: '1.0',
@@ -122,6 +121,7 @@ function getLargeConfig(): ExportedConfig {
       associatedDomains: ['applinks:https://pillarvalley.netlify.app'],
       usesIcloudStorage: true,
       usesAppleSignIn: true,
+      usesBroadcastPushNotifications: true,
       accessesContactNotes: true,
     },
     android: {
@@ -339,61 +339,67 @@ describe('built-in plugins', () => {
     // Test the written files...
     const after = getDirFromFS(vol.toJSON(), projectRoot);
 
-    expect(Object.keys(after)).toEqual([
-      'node_modules/react-native-maps/package.json',
-      'ios/.xcode.env',
-      'ios/HelloWorld/AppDelegate.h',
-      'ios/HelloWorld/AppDelegate.mm',
-      'ios/HelloWorld/Images.xcassets/AppIcon.appiconset/Contents.json',
-      'ios/HelloWorld/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png',
-      'ios/HelloWorld/Images.xcassets/Contents.json',
-      'ios/HelloWorld/Images.xcassets/SplashScreenBackground.imageset/image.png',
-      'ios/HelloWorld/Images.xcassets/SplashScreenBackground.imageset/Contents.json',
-      'ios/HelloWorld/Info.plist',
-      'ios/HelloWorld/SplashScreen.storyboard',
-      'ios/HelloWorld/Supporting/Expo.plist',
-      'ios/HelloWorld/Supporting/en.lproj/InfoPlist.strings',
-      'ios/HelloWorld/Supporting/es.lproj/InfoPlist.strings',
-      'ios/HelloWorld/main.m',
-      'ios/HelloWorld/GoogleService-Info.plist',
-      'ios/HelloWorld/noop-file.swift',
-      'ios/HelloWorld/HelloWorld-Bridging-Header.h',
-      'ios/HelloWorld/mycoolapp.entitlements',
-      'ios/HelloWorld.xcodeproj/project.pbxproj',
-      'ios/HelloWorld.xcodeproj/project.xcworkspace/contents.xcworkspacedata',
-      'ios/HelloWorld.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist',
-      'ios/HelloWorld.xcodeproj/xcshareddata/xcschemes/HelloWorld.xcscheme',
-      'ios/HelloWorld.xcworkspace/contents.xcworkspacedata',
-      'ios/HelloWorld.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist',
-      'ios/Podfile',
-      'ios/Podfile.properties.json',
-      'ios/gitignore',
-      'android/app/build.gradle',
-      'android/app/debug.keystore',
-      'android/app/proguard-rules.pro',
-      'android/app/src/debug/AndroidManifest.xml',
-      'android/app/src/main/AndroidManifest.xml',
-      'android/app/src/main/java/com/bacon/todo/MainActivity.kt',
-      'android/app/src/main/java/com/bacon/todo/MainApplication.kt',
-      'android/app/src/main/res/drawable/rn_edit_text_material.xml',
-      'android/app/src/main/res/drawable/splashscreen.xml',
-      'android/app/src/main/res/values/colors.xml',
-      'android/app/src/main/res/values/strings.xml',
-      'android/app/src/main/res/values/styles.xml',
-      'android/app/src/main/res/values-night/colors.xml',
-      'android/app/google-services.json',
-      'android/build.gradle',
-      'android/gitignore',
-      'android/gradle/wrapper/gradle-wrapper.jar',
-      'android/gradle/wrapper/gradle-wrapper.properties',
-      'android/gradle.properties',
-      'android/gradlew',
-      'android/gradlew.bat',
-      'android/settings.gradle',
-      'config/GoogleService-Info.plist',
-      'config/google-services.json',
-      'locales/en-US.json',
-    ]);
+    expect(Object.keys(after).sort()).toEqual(
+      [
+        'node_modules/react-native-maps/package.json',
+        'ios/.xcode.env',
+        'ios/HelloWorld/AppDelegate.swift',
+        'ios/HelloWorld/Images.xcassets/AppIcon.appiconset/Contents.json',
+        'ios/HelloWorld/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png',
+        'ios/HelloWorld/Images.xcassets/Contents.json',
+        'ios/HelloWorld/Images.xcassets/SplashScreenBackground.colorset/Contents.json',
+        'ios/HelloWorld/Info.plist',
+        'ios/HelloWorld/SplashScreen.storyboard',
+        'ios/HelloWorld/Supporting/Expo.plist',
+        'ios/HelloWorld/Supporting/en.lproj/InfoPlist.strings',
+        'ios/HelloWorld/Supporting/es.lproj/InfoPlist.strings',
+        'ios/HelloWorld/GoogleService-Info.plist',
+        'ios/HelloWorld/HelloWorld-Bridging-Header.h',
+        'ios/HelloWorld/mycoolapp.entitlements',
+        'ios/HelloWorld.xcodeproj/project.pbxproj',
+        'ios/HelloWorld.xcodeproj/project.xcworkspace/contents.xcworkspacedata',
+        'ios/HelloWorld.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist',
+        'ios/HelloWorld.xcodeproj/xcshareddata/xcschemes/HelloWorld.xcscheme',
+        'ios/Podfile',
+        'ios/Podfile.properties.json',
+        'ios/gitignore',
+        'android/app/build.gradle',
+        'android/app/debug.keystore',
+        'android/app/proguard-rules.pro',
+        'android/app/src/debug/AndroidManifest.xml',
+        'android/app/src/main/AndroidManifest.xml',
+        'android/app/src/main/java/com/bacon/todo/MainActivity.kt',
+        'android/app/src/main/java/com/bacon/todo/MainApplication.kt',
+        'android/app/src/main/res/drawable/ic_launcher_background.xml',
+        'android/app/src/main/res/drawable/rn_edit_text_material.xml',
+        'android/app/src/main/res/mipmap-hdpi/ic_launcher.webp',
+        'android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp',
+        'android/app/src/main/res/mipmap-mdpi/ic_launcher.webp',
+        'android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp',
+        'android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp',
+        'android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp',
+        'android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp',
+        'android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp',
+        'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp',
+        'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp',
+        'android/app/src/main/res/values/colors.xml',
+        'android/app/src/main/res/values/strings.xml',
+        'android/app/src/main/res/values/styles.xml',
+        'android/app/src/main/res/values-night/colors.xml',
+        'android/app/google-services.json',
+        'android/build.gradle',
+        'android/gitignore',
+        'android/gradle/wrapper/gradle-wrapper.jar',
+        'android/gradle/wrapper/gradle-wrapper.properties',
+        'android/gradle.properties',
+        'android/gradlew',
+        'android/gradlew.bat',
+        'android/settings.gradle',
+        'config/GoogleService-Info.plist',
+        'config/google-services.json',
+        'locales/en-US.json',
+      ].sort()
+    );
 
     expect(after['ios/HelloWorld/mycoolapp.entitlements']).toMatch(
       'com.apple.developer.associated-domains'
@@ -427,12 +433,12 @@ describe('built-in plugins', () => {
 
     // Ensure the infoPlist object is merged correctly
     const infoPlist = await plist.parse(
-      fs.readFileSync(path.join(projectRoot, 'ios/HelloWorld/Info.plist'), 'utf8')
+      fsMock.readFileSync(path.join(projectRoot, 'ios/HelloWorld/Info.plist'), 'utf8')
     );
     expect(infoPlist.bar).toStrictEqual({ val: ['foo'] });
     // Ensure the entitlements object is merged correctly
     const entitlements = await plist.parse(
-      fs.readFileSync(path.join(projectRoot, 'ios/HelloWorld/mycoolapp.entitlements'), 'utf8')
+      fsMock.readFileSync(path.join(projectRoot, 'ios/HelloWorld/mycoolapp.entitlements'), 'utf8')
     );
     expect(entitlements.foo).toStrictEqual('bar');
 
@@ -503,23 +509,18 @@ describe('built-in plugins', () => {
     expect(Object.keys(after)).toEqual([
       'node_modules/react-native-maps/package.json',
       'ios/.xcode.env',
-      'ios/HelloWorld/AppDelegate.h',
-      'ios/HelloWorld/AppDelegate.mm',
+      'ios/HelloWorld/AppDelegate.swift',
+      'ios/HelloWorld/HelloWorld-Bridging-Header.h',
       'ios/HelloWorld/Images.xcassets/AppIcon.appiconset/Contents.json',
       'ios/HelloWorld/Images.xcassets/Contents.json',
-      'ios/HelloWorld/Images.xcassets/SplashScreen.imageset/Contents.json',
-      'ios/HelloWorld/Images.xcassets/SplashScreenBackground.imageset/Contents.json',
       'ios/HelloWorld/Info.plist',
       'ios/HelloWorld/SplashScreen.storyboard',
       'ios/HelloWorld/Supporting/Expo.plist',
-      'ios/HelloWorld/main.m',
       'ios/HelloWorld/HelloWorld.entitlements',
       'ios/HelloWorld.xcodeproj/project.pbxproj',
       'ios/HelloWorld.xcodeproj/project.xcworkspace/contents.xcworkspacedata',
       'ios/HelloWorld.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist',
       'ios/HelloWorld.xcodeproj/xcshareddata/xcschemes/HelloWorld.xcscheme',
-      'ios/HelloWorld.xcworkspace/contents.xcworkspacedata',
-      'ios/HelloWorld.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist',
       'ios/Podfile',
       'ios/Podfile.properties.json',
       'ios/gitignore',
@@ -530,8 +531,18 @@ describe('built-in plugins', () => {
       'android/app/src/main/AndroidManifest.xml',
       'android/app/src/main/java/com/helloworld/MainActivity.kt',
       'android/app/src/main/java/com/helloworld/MainApplication.kt',
+      'android/app/src/main/res/drawable/ic_launcher_background.xml',
       'android/app/src/main/res/drawable/rn_edit_text_material.xml',
-      'android/app/src/main/res/drawable/splashscreen.xml',
+      'android/app/src/main/res/mipmap-hdpi/ic_launcher.webp',
+      'android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp',
+      'android/app/src/main/res/mipmap-mdpi/ic_launcher.webp',
+      'android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp',
+      'android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp',
+      'android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp',
+      'android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp',
+      'android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp',
+      'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp',
+      'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp',
       'android/app/src/main/res/values/colors.xml',
       'android/app/src/main/res/values/strings.xml',
       'android/app/src/main/res/values/styles.xml',

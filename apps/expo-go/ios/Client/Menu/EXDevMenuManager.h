@@ -17,10 +17,9 @@
 + (nonnull instancetype)sharedInstance;
 
 /**
- * Returns the bridge to which the dev menu is hooked.
- * TODO: (@tsapeta) It's gonna be removed once the dev menu moves to have its own bridge.
+ * Returns the ReactNativeFactory that the dev menu uses to create it's root view.
  */
-- (nullable RCTBridge *)mainBridge;
+- (nullable RCTReactNativeFactory *)mainAppFactory;
 
 /**
  * Returns bool value whether the dev menu is visible.

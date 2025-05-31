@@ -1,7 +1,7 @@
 // Copyright 2018-present 650 Industries. All rights reserved.
 
 #import <ExpoModulesCore/EXReactDelegateWrapper.h>
-#import <ExpoModulesCore/EXReactDelegateWrapper+Private.h>
+#import <ExpoModulesCore/Swift.h>
 
 @interface EXReactDelegateWrapper()
 
@@ -26,6 +26,11 @@
   return [_expoReactDelegate createReactRootViewWithModuleName:moduleName
                                              initialProperties:initialProperties
                                                  launchOptions:launchOptions];
+}
+
+- (NSURL *)bundleURL
+{
+  return [_expoReactDelegate bundleURL];
 }
 
 - (UIViewController *)createRootViewController

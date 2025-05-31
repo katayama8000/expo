@@ -4,17 +4,100 @@
 
 ### 🛠 Breaking changes
 
-- Remove classic updates. ([#26036](https://github.com/expo/expo/pull/26036), [#26048](https://github.com/expo/expo/pull/26048) by [@wschurman](https://github.com/wschurman))
-
 ### 🎉 New features
 
 ### 🐛 Bug fixes
 
 ### 💡 Others
 
+## 0.16.5 — 2025-05-08
+
+_This version does not introduce any user-facing changes._
+
+## 0.16.4 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 0.16.3 — 2025-04-25
+
+_This version does not introduce any user-facing changes._
+
+## 0.16.2 — 2025-04-22
+
+_This version does not introduce any user-facing changes._
+
+## 0.16.1 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.16.0 — 2025-04-04
+
+### 💡 Others
+
+- [Android] Started using expo modules gradle plugin. ([#34176](https://github.com/expo/expo/pull/34176) by [@lukmccall](https://github.com/lukmccall))
+
+## 0.15.7 - 2025-02-21
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.6 - 2025-02-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.5 - 2025-01-10
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.4 — 2024-11-19
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.3 — 2024-11-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.2 — 2024-11-05
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.1 — 2024-10-22
+
+_This version does not introduce any user-facing changes._
+
+## 0.15.0 — 2024-10-22
+
+### 🛠 Breaking changes
+
+- Bumped iOS and tvOS deployment target to 15.1. ([#30840](https://github.com/expo/expo/pull/30840) by [@tsapeta](https://github.com/tsapeta))
+
+### 🐛 Bug fixes
+
+- Only import from `expo/config` to follow proper dependency chains. ([#30501](https://github.com/expo/expo/pull/30501) by [@byCedric](https://github.com/byCedric))
+
+## 0.14.3 — 2024-05-16
+
+_This version does not introduce any user-facing changes._
+
+## 0.14.2 — 2024-05-06
+
+_This version does not introduce any user-facing changes._
+
+## 0.14.1 — 2024-04-29
+
+_This version does not introduce any user-facing changes._
+
+## 0.14.0 — 2024-04-18
+
+### 🛠 Breaking changes
+
+- Remove classic updates. ([#26036](https://github.com/expo/expo/pull/26036), [#26048](https://github.com/expo/expo/pull/26048) by [@wschurman](https://github.com/wschurman))
+
+### 💡 Others
+
 - [Android] Remove unsafe internal mutation capability. ([#26229](https://github.com/expo/expo/pull/26229) by [@wschurman](https://github.com/wschurman))
 - Rename manifest classes. ([#26234](https://github.com/expo/expo/pull/26234), [#26235](https://github.com/expo/expo/pull/26235), [#26257](https://github.com/expo/expo/pull/26257) by [@wschurman](https://github.com/wschurman))
 - Remove use of legacy sdkVersion runtimeVersion policy. ([#26957](https://github.com/expo/expo/pull/26957) by [@wschurman](https://github.com/wschurman))
+- Removed deprecated backward compatible Gradle settings. ([#28083](https://github.com/expo/expo/pull/28083) by [@kudo](https://github.com/kudo))
 
 ## 0.13.2 - 2024-01-18
 

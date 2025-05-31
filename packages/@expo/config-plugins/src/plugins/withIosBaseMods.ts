@@ -35,6 +35,7 @@ function getInfoPlistTemplate() {
     CFBundlePackageType: '$(PRODUCT_BUNDLE_PACKAGE_TYPE)',
     CFBundleInfoDictionaryVersion: '6.0',
     CFBundleSignature: '????',
+    LSMinimumSystemVersion: '12.0',
     LSRequiresIPhoneOS: true,
     NSAppTransportSecurity: {
       NSAllowsArbitraryLoads: true,
@@ -272,6 +273,20 @@ const defaultProviders = {
       }
 
       await writeFile(filePath, plist.build(sortObject(config.modResults)));
+    },
+  }),
+
+  podfile: provider<Paths.PodfileProjectFile>({
+    getFilePath({ modRequest: { projectRoot } }) {
+      return Paths.getPodfilePath(projectRoot);
+    },
+    // @ts-expect-error
+    async read(filePath) {
+      // Note(cedric): this file is ruby, which is a 1-value subset of AppleLanguage and fails the type check
+      return Paths.getFileInfo(filePath);
+    },
+    async write(filePath, { modResults: { contents } }) {
+      await writeFile(filePath, contents);
     },
   }),
 

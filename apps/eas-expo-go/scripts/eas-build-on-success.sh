@@ -5,6 +5,13 @@ set -xeuo pipefail
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/../../.. && pwd )"
 export PATH="$ROOT_DIR/bin:$PATH"
 
+if [ -n "${EXPO_TOKEN+x}" ]; then
+  echo "Unsetting EXPO_TOKEN"
+  unset EXPO_TOKEN
+else
+  echo "EXPO_TOKEN is not set"
+fi
+
 notify_slack() {
   if [[ ! -z "$SLACK_HOOK" ]]; then
     curl \
@@ -27,7 +34,7 @@ upload_crashlytics_symbols() {
 
 if [[ "$EAS_BUILD_PROFILE" == "release-client" ]]; then
   if [[ "$EAS_BUILD_PLATFORM" == "android" ]]; then
-    upload_crashlytics_symbols "VersionedRelease"
+    upload_crashlytics_symbols "Release"
   fi
 
   SLUG="release-client"
@@ -50,7 +57,7 @@ fi
 
 if [[ "$EAS_BUILD_PROFILE" == "publish-client" ]]; then
   if [[ "$EAS_BUILD_PLATFORM" == "android" ]]; then
-    upload_crashlytics_symbols "VersionedRelease"
+    upload_crashlytics_symbols "Release"
   fi
 
   SLUG="publish-client"

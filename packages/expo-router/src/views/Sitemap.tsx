@@ -11,25 +11,21 @@ import {
   ScrollView,
   Platform,
   StatusBar,
-  useWindowDimensions,
+  ViewStyle,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Pressable } from './Pressable';
-import { RouteNode } from '../Route';
-import { useExpoRouter } from '../global-state/router-store';
-import { router } from '../imperative-api';
+import { Pressable, PressableProps } from './Pressable';
+import { useSitemap, SitemapType } from './useSitemap';
 import { Link } from '../link/Link';
-import { matchDeepDynamicRouteName } from '../matchers';
+import { canOverrideStatusBarBehavior } from '../utils/statusbar';
 
-const INDENT = 24;
+const INDENT = 20;
 
 export function getNavOptions(): NativeStackNavigationOptions {
   return {
     title: 'sitemap',
-    headerShown: false,
     presentation: 'modal',
-    animation: 'default',
     headerLargeTitle: false,
     headerTitleStyle: {
       color: 'white',
@@ -43,158 +39,149 @@ export function getNavOptions(): NativeStackNavigationOptions {
       // @ts-expect-error: mistyped
       borderBottomColor: '#323232',
     },
+    header: () => {
+      const WrapperElement = Platform.OS === 'android' ? SafeAreaView : View;
+      return (
+        <WrapperElement style={styles.header}>
+          <View style={styles.headerContent}>
+            <View style={styles.headerIcon}>
+              <SitemapIcon />
+            </View>
+            <Text role="heading" aria-level={1} style={styles.title}>
+              Sitemap
+            </Text>
+          </View>
+        </WrapperElement>
+      );
+    },
   };
 }
 
 export function Sitemap() {
-  const { top, bottom } = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const sitemap = useSitemap();
+  const children = React.useMemo(
+    () => sitemap?.children.filter(({ isInternal }) => !isInternal) ?? [],
+    [sitemap]
+  );
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <View
-        style={[
-          styles.main,
-          {
-            minWidth: Math.min(960, width * 0.9),
-          },
-        ]}>
-        <ScrollView
-          contentContainerStyle={[
-            styles.scroll,
-            {
-              paddingTop: top + 12,
-              paddingBottom: bottom + 12,
-            },
-          ]}
-          style={{ flex: 1 }}>
-          <FileSystemView />
-        </ScrollView>
-      </View>
+      {canOverrideStatusBarBehavior && <StatusBar barStyle="light-content" />}
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {children.map((child) => (
+          <View testID="sitemap-item-container" key={child.contextKey} style={styles.itemContainer}>
+            <SitemapItem node={child} />
+          </View>
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
-function FileSystemView() {
-  const routes = useExpoRouter().getSortedRoutes();
+interface SitemapItemProps {
+  node: SitemapType;
+  level?: number;
+  info?: string;
+}
+
+function SitemapItem({ node, level = 0 }: SitemapItemProps) {
+  const isLayout = React.useMemo(
+    () => node.children.length > 0 || node.contextKey.match(/_layout\.[jt]sx?$/),
+    [node]
+  );
+  const info = node.isInitial ? 'Initial' : node.isGenerated ? 'Generated' : '';
+
+  if (isLayout) {
+    return <LayoutSitemapItem node={node} level={level} info={info} />;
+  }
+  return <StandardSitemapItem node={node} level={level} info={info} />;
+}
+function LayoutSitemapItem({ node, level, info }: Required<SitemapItemProps>) {
+  const [isCollapsed, setIsCollapsed] = React.useState(true);
 
   return (
     <>
-      {routes.map((child) => (
-        <View key={child.contextKey} style={styles.itemContainer}>
-          <FileItem route={child} />
-        </View>
-      ))}
+      <SitemapItemPressable
+        style={{ opacity: 0.4 }}
+        leftIcon={<PkgIcon />}
+        rightIcon={<ArrowIcon rotation={isCollapsed ? 0 : 180} />}
+        filename={node.filename}
+        level={level}
+        info={info}
+        onPress={() => setIsCollapsed((prev) => !prev)}
+      />
+      {!isCollapsed &&
+        node.children.map((child) => (
+          <SitemapItem
+            key={child.contextKey}
+            node={child}
+            level={level + (node.isGenerated ? 0 : 1)}
+          />
+        ))}
     </>
   );
 }
 
-function FileItem({
-  route,
-  level = 0,
-  parents = [],
-  isInitial = false,
-}: {
-  route: RouteNode;
-  level?: number;
-  parents?: string[];
-  isInitial?: boolean;
-}) {
-  const disabled = route.children.length > 0;
-
-  const segments = React.useMemo(
-    () => [...parents, ...route.route.split('/')],
-    [parents, route.route]
-  );
-
-  const href = React.useMemo(() => {
-    return (
-      '/' +
-      segments
-        .map((v) => {
-          // add an extra layer of entropy to the url for deep dynamic routes
-          if (matchDeepDynamicRouteName(v)) {
-            return v + '/' + Date.now();
-          }
-          // index must be erased but groups can be preserved.
-          return v === 'index' ? '' : v;
-        })
-        .filter(Boolean)
-        .join('/')
-    );
-  }, [segments, route.route]);
-
-  const filename = React.useMemo(() => {
-    const segments = route.contextKey.split('/');
-    // join last two segments for layout routes
-    if (route.contextKey.match(/_layout\.[jt]sx?$/)) {
-      return segments[segments.length - 2] + '/' + segments[segments.length - 1];
-    }
-
-    const segmentCount = route.route.split('/').length;
-
-    // Join the segment count in reverse order
-    // This presents files without layout routes as children with all relevant segments.
-    return segments.slice(-segmentCount).join('/');
-  }, [route]);
-
-  const info = isInitial ? 'Initial' : route.generated ? 'Virtual' : '';
-
+function StandardSitemapItem({ node, info, level }: Required<SitemapItemProps>) {
   return (
-    <>
-      {!route.internal && (
-        <Link
-          accessibilityLabel={route.contextKey}
-          href={href}
-          onPress={() => {
-            if (Platform.OS !== 'web' && router.canGoBack()) {
-              // Ensure the modal pops
-              router.back();
-            }
-          }}
-          style={{ flex: 1, display: 'flex' }}
-          disabled={disabled}
-          asChild
-          // Ensure we replace the history so you can't go back to this page.
-          replace>
-          <Pressable style={{ flex: 1 }}>
-            {({ pressed, hovered }) => (
-              <View
-                style={[
-                  styles.itemPressable,
-                  {
-                    paddingLeft: INDENT + level * INDENT,
-                    backgroundColor: hovered ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  },
-                  pressed && { backgroundColor: '#323232' },
-                  disabled && { opacity: 0.4 },
-                ]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  {route.children.length ? <PkgIcon /> : <FileIcon />}
-                  <Text style={styles.filename}>{filename}</Text>
-                </View>
+    <Link
+      accessibilityLabel={node.contextKey}
+      href={node.href}
+      asChild
+      // Ensure we replace the history so you can't go back to this page.
+      replace>
+      <SitemapItemPressable
+        leftIcon={<FileIcon />}
+        rightIcon={<ForwardIcon />}
+        filename={node.filename}
+        level={level}
+        info={info}
+      />
+    </Link>
+  );
+}
 
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  {!!info && (
-                    <Text style={[styles.virtual, !disabled && { marginRight: 8 }]}>{info}</Text>
-                  )}
-                  {!disabled && <ForwardIcon />}
-                </View>
-              </View>
-            )}
-          </Pressable>
-        </Link>
+function SitemapItemPressable({
+  style,
+  leftIcon,
+  rightIcon,
+  filename,
+  level,
+  info,
+  ...pressableProps
+}: {
+  style?: ViewStyle;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+  filename: string;
+  level: number;
+  info?: string;
+} & Omit<PressableProps, 'style' | 'children'>) {
+  return (
+    <Pressable {...pressableProps}>
+      {({ pressed, hovered }) => (
+        <View
+          testID="sitemap-item"
+          style={[
+            styles.itemPressable,
+            {
+              paddingLeft: INDENT + level * INDENT,
+              backgroundColor: hovered ? '#202425' : 'transparent',
+            },
+            pressed && { backgroundColor: '#26292b' },
+            style,
+          ]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {leftIcon}
+            <Text style={styles.filename}>{filename}</Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {!!info && <Text style={[styles.virtual, { marginRight: 8 }]}>{info}</Text>}
+            {rightIcon}
+          </View>
+        </View>
       )}
-      {route.children.map((child) => (
-        <FileItem
-          key={child.contextKey}
-          route={child}
-          isInitial={route.initialRouteName === child.route}
-          parents={segments}
-          level={level + (route.generated ? 0 : 1)}
-        />
-      ))}
-    </>
+    </Pressable>
   );
 }
 
@@ -210,28 +197,85 @@ function ForwardIcon() {
   return <Image style={styles.image} source={require('expo-router/assets/forward.png')} />;
 }
 
+function SitemapIcon() {
+  return <Image style={styles.image} source={require('expo-router/assets/sitemap.png')} />;
+}
+
+function ArrowIcon({ rotation = 0 }: { rotation?: number }) {
+  return (
+    <Image
+      style={[
+        styles.image,
+        {
+          transform: [{ rotate: `${rotation}deg` }],
+        },
+      ]}
+      source={require('expo-router/assets/arrow_down.png')}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: 'black',
     flex: 1,
     alignItems: 'stretch',
   },
-  main: {
-    marginHorizontal: 'auto',
-    flex: 1,
-
-    alignItems: 'stretch',
+  header: {
+    backgroundColor: '#151718',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderColor: '#313538',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.33,
+    shadowRadius: 3,
+    elevation: 8,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: '5%',
+    ...Platform.select({
+      web: {
+        width: '100%',
+        maxWidth: 960,
+        marginHorizontal: 'auto',
+      },
+    }),
+  },
+  title: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: 'bold',
   },
   scroll: {
-    paddingHorizontal: 12,
-    // flex: 1,
-    // paddingTop: top + 12,
-    alignItems: 'stretch',
+    paddingHorizontal: '5%',
+    paddingVertical: 16,
+    ...Platform.select({
+      ios: {
+        paddingBottom: 24,
+      },
+      web: {
+        width: '100%',
+        maxWidth: 960,
+        marginHorizontal: 'auto',
+        paddingBottom: 24,
+      },
+      default: {
+        paddingBottom: 12,
+      },
+    }),
   },
   itemContainer: {
     borderWidth: 1,
-    borderColor: '#323232',
-    borderRadius: 19,
+    borderColor: '#313538',
+    backgroundColor: '#151718',
+    borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
   },
@@ -249,5 +293,14 @@ const styles = StyleSheet.create({
   },
   filename: { color: 'white', fontSize: 20, marginLeft: 12 },
   virtual: { textAlign: 'right', color: 'white' },
-  image: { width: 24, height: 24, resizeMode: 'contain' },
+  image: { width: 24, height: 24, resizeMode: 'contain', opacity: 0.6 },
+  headerIcon: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#202425',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

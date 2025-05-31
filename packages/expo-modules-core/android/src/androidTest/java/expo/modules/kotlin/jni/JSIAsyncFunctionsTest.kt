@@ -3,12 +3,16 @@
 package expo.modules.kotlin.jni
 
 import com.google.common.truth.Truth
+import expo.modules.kotlin.RuntimeContext
 import expo.modules.kotlin.exception.CodedException
+import expo.modules.kotlin.exception.JavaScriptEvaluateException
 import expo.modules.kotlin.jni.extensions.addSingleQuotes
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import expo.modules.kotlin.sharedobjects.SharedRef
 import expo.modules.kotlin.types.Enumerable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import org.junit.Assert
 import org.junit.Test
 
@@ -194,8 +198,8 @@ class JSIAsyncFunctionsTest {
     Truth.assertThat(exception.message).contains("java.lang.IllegalStateException")
   }
 
-  @Test(expected = PromiseException::class)
-  fun should_reject_if_js_value_cannot_be_passed() = withSingleModule({
+  @Test(expected = JavaScriptEvaluateException::class)
+  fun should_throw_if_js_value_cannot_be_passed() = withSingleModule({
     AsyncFunction("f") { _: Int -> }
   }) {
     callAsync("f", "Symbol()")
@@ -255,5 +259,64 @@ class JSIAsyncFunctionsTest {
     Truth.assertThat(e2).isEqualTo(2)
     Truth.assertThat(e3).isEqualTo(3)
     Truth.assertThat(e4).isEqualTo(4)
+  }
+
+  @Test
+  fun long_array_should_be_convertible() = withSingleModule({
+    AsyncFunction("longArray") { a: LongArray -> a }
+  }) {
+    val array = callAsync("longArray", "[1, 2, 3]").getArray()
+    Truth.assertThat(array.size).isEqualTo(3)
+
+    val e1 = array[0].getDouble()
+    val e2 = array[1].getDouble()
+    val e3 = array[2].getDouble()
+
+    Truth.assertThat(e1).isEqualTo(1.0)
+    Truth.assertThat(e2).isEqualTo(2.0)
+    Truth.assertThat(e3).isEqualTo(3.0)
+  }
+
+  private class MySharedRef(value: Int, runtimeContext: RuntimeContext) : SharedRef<Int>(value, runtimeContext)
+
+  @Test
+  fun shared_ref_should_be_convertible() = withSingleModule({
+    AsyncFunction("createRef") {
+      MySharedRef(123, module!!.runtimeContext)
+    }
+    Function("getRef") { ref: MySharedRef ->
+      ref.ref
+    }
+  }) {
+    callAsync("createRef").getObject()
+    val value = call("getRef", "global.promiseResult").getInt()
+    Truth.assertThat(value).isEqualTo(123)
+  }
+
+  @Test
+  fun use_custom_queue() {
+    val testScope = TestScope()
+    var wasCalled = false
+    withSingleModule({
+      AsyncFunction("customQueue") {
+        wasCalled = true
+        "customQueue"
+      }.runOnQueue(testScope)
+    }) {
+      callAsync("customQueue", shouldBeResolved = false)
+
+      Truth
+        .assertWithMessage("Method was called on the wrong queue")
+        .that(wasCalled)
+        .isFalse()
+
+      testScope.testScheduler.advanceUntilIdle()
+      jsiInterop.drainJSEventLoop()
+
+      Truth.assertThat(wasCalled).isTrue()
+      val result = getLastPromiseResult()
+
+      Truth.assertThat(result.getString()).isEqualTo("customQueue")
+    }
   }
 }

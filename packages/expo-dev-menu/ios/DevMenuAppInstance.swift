@@ -1,37 +1,37 @@
 // Copyright 2015-present 650 Industries. All rights reserved.
 
 import React
+import ReactAppDependencyProvider
+import React_RCTAppDelegate
 
 @objc
-class DevMenuAppInstance: DevMenuRCTAppDelegate {
+class DevMenuAppInstance: DevMenuReactNativeFactoryDelegate {
   static private var CloseEventName = "closeDevMenu"
   static private var OpenEventName = "openDevMenu"
 
   private let manager: DevMenuManager
+  var reactNativeFactory: RCTReactNativeFactory?
 
   init(manager: DevMenuManager) {
     self.manager = manager
-
     super.init()
-    self.createBridgeAndSetAdapter(launchOptions: nil)
+    self.dependencyProvider = RCTAppDependencyProvider()
+    self.reactNativeFactory = RCTReactNativeFactory(delegate: self)
   }
 
-  init(manager: DevMenuManager, bridge: RCTBridge) {
-    self.manager = manager
-
-    super.init()
-    self.rootViewFactory.bridge = bridge
+  func setBridge(_ bridge: RCTBridge) {
+    self.reactNativeFactory?.rootViewFactory.bridge = bridge
   }
 
   /**
    Sends an event to JS triggering the animation that collapses the dev menu.
    */
   func sendCloseEvent() {
-    self.rootViewFactory.bridge?.enqueueJSCall("RCTDeviceEventEmitter.emit", args: [DevMenuAppInstance.CloseEventName])
+    self.reactNativeFactory?.rootViewFactory.bridge?.enqueueJSCall("RCTDeviceEventEmitter.emit", args: [DevMenuAppInstance.CloseEventName])
   }
 
   func sendOpenEvent() {
-    self.rootViewFactory.bridge?.enqueueJSCall("RCTDeviceEventEmitter.emit", args: [DevMenuAppInstance.OpenEventName])
+    self.reactNativeFactory?.rootViewFactory.bridge?.enqueueJSCall("RCTDeviceEventEmitter.emit", args: [DevMenuAppInstance.OpenEventName])
   }
 
   // MARK: RCTAppDelegate
@@ -44,12 +44,6 @@ class DevMenuAppInstance: DevMenuRCTAppDelegate {
     return jsSourceUrl()
   }
 
-  override func extraModules(for bridge: RCTBridge) -> [RCTBridgeModule] {
-    var modules: [RCTBridgeModule] = [DevMenuLoadingView.init()]
-    modules.append(DevMenuRCTDevSettings.init())
-    return modules
-  }
-
   override func bridge(_ bridge: RCTBridge, didNotFindModule moduleName: String) -> Bool {
     return moduleName == "DevMenu"
   }
@@ -60,7 +54,7 @@ class DevMenuAppInstance: DevMenuRCTAppDelegate {
     #if DEBUG
     if let packagerHost = jsPackagerHost(),
       let url = RCTBundleURLProvider.jsBundleURL(
-        forBundleRoot: "index",
+        forBundleRoot: "packages/expo-dev-menu/index",
         packagerHost: packagerHost,
         enableDev: true,
         enableMinification: false,
@@ -80,10 +74,12 @@ class DevMenuAppInstance: DevMenuRCTAppDelegate {
       return nil
     }
     // Return `nil` if the content is not a valid URL.
-    guard let content = try? String(contentsOfFile: packagerHostPath, encoding: String.Encoding.utf8).trimmingCharacters(in: CharacterSet.newlines),
-      let url = URL(string: content) else {
+    guard let content = try? String(contentsOfFile: packagerHostPath, encoding: .utf8).trimmingCharacters(in: .newlines) else {
       return nil
     }
-    return url.absoluteString
+    guard let url = URL(string: "http://\(content)"), let host = url.host else {
+      return nil
+    }
+    return "\(host):\(url.port ?? 8081)"
   }
 }

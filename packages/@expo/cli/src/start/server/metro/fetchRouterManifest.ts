@@ -20,6 +20,8 @@ export type ExpoRouterServerManifestV1<TRegex = string> = {
   apiRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
   htmlRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
   notFoundRoutes: ExpoRouterServerManifestV1Route<TRegex>[];
+  redirects: ExpoRouterServerManifestV1Route<TRegex>[];
+  rewrites: ExpoRouterServerManifestV1Route<TRegex>[];
 };
 
 function getExpoRouteManifestBuilderAsync(projectRoot: string) {
@@ -30,12 +32,15 @@ function getExpoRouteManifestBuilderAsync(projectRoot: string) {
 // TODO: Simplify this now that we use Node.js directly, no need for the Metro bundler caching layer.
 export async function fetchManifest<TRegex = string>(
   projectRoot: string,
-  options: { asJson?: boolean; appDir: string }
+  options: {
+    asJson?: boolean;
+    appDir: string;
+  } & import('expo-router/build/routes-manifest').Options
 ): Promise<ExpoRouterServerManifestV1<TRegex> | null> {
   const getManifest = getExpoRouteManifestBuilderAsync(projectRoot);
   const paths = getRoutePaths(options.appDir);
   // Get the serialized manifest
-  const jsonManifest = getManifest(paths);
+  const jsonManifest = getManifest(paths, options);
 
   if (!jsonManifest) {
     return null;
@@ -72,6 +77,18 @@ export function inflateManifest(
       };
     }),
     notFoundRoutes: json.notFoundRoutes?.map((value) => {
+      return {
+        ...value,
+        namedRegex: new RegExp(value.namedRegex),
+      };
+    }),
+    redirects: json.redirects?.map((value: any) => {
+      return {
+        ...value,
+        namedRegex: new RegExp(value.namedRegex),
+      };
+    }),
+    rewrites: json.rewrites?.map((value: any) => {
       return {
         ...value,
         namedRegex: new RegExp(value.namedRegex),

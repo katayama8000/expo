@@ -1,14 +1,15 @@
 import { getConfig } from '@expo/config';
 import { Updates } from '@expo/config-plugins';
-import * as Fingerprint from '@expo/fingerprint';
+import * as Fingerprint from 'expo/fingerprint';
 
 import { createFingerprintAsync } from './createFingerprintAsync';
-import { resolveWorkflowAsync } from './workflow';
+import { Workflow, resolveWorkflowAsync } from './workflow';
 
 export async function resolveRuntimeVersionAsync(
   projectRoot: string,
   platform: 'ios' | 'android',
-  options: Fingerprint.Options
+  fingerprintOptions: Fingerprint.Options,
+  otherOptions: { workflowOverride?: Workflow }
 ): Promise<{
   runtimeVersion: string | null;
   fingerprintSources: Fingerprint.FingerprintSource[] | null;
@@ -19,17 +20,28 @@ export async function resolveRuntimeVersionAsync(
     skipSDKVersionRequirement: true,
   });
 
-  const workflow = await resolveWorkflowAsync(projectRoot, platform);
+  const workflow =
+    otherOptions.workflowOverride ?? (await resolveWorkflowAsync(projectRoot, platform));
 
   const runtimeVersion = config[platform]?.runtimeVersion ?? config.runtimeVersion;
   if (!runtimeVersion || typeof runtimeVersion === 'string') {
     return { runtimeVersion: runtimeVersion ?? null, fingerprintSources: null, workflow };
   }
 
+  if (typeof runtimeVersion !== 'object' || Array.isArray(runtimeVersion)) {
+    throw new Error(
+      `Invalid runtime version: ${JSON.stringify(runtimeVersion)}. Expected a string or an object with a "policy" key. https://docs.expo.dev/eas-update/runtime-versions`
+    );
+  }
   const policy = runtimeVersion.policy;
 
-  if (policy === 'fingerprintExperimental') {
-    const fingerprint = await createFingerprintAsync(projectRoot, platform, workflow, options);
+  if (policy === 'fingerprint') {
+    const fingerprint = await createFingerprintAsync(
+      projectRoot,
+      platform,
+      workflow,
+      fingerprintOptions
+    );
     return { runtimeVersion: fingerprint.hash, fingerprintSources: fingerprint.sources, workflow };
   }
 

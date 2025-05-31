@@ -1,12 +1,12 @@
 // Copyright 2015-present 650 Industries. All rights reserved.
 package host.exp.exponent.experience
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import com.facebook.drawee.backends.pipeline.Fresco
 import de.greenrobot.event.EventBus
-import host.exp.exponent.RNObject
 import host.exp.exponent.di.NativeModuleDepsProvider
 import host.exp.exponent.kernel.*
 import host.exp.exponent.kernel.ExponentErrorMessage.Companion.developerErrorMessage
@@ -16,7 +16,14 @@ import host.exp.exponent.storage.ExponentSharedPreferences
 import host.exp.expoview.Exponent
 import javax.inject.Inject
 
-abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
+data class ErrorProcessingResult(
+  val isFatal: Boolean,
+  val errorMessage: ExponentErrorMessage,
+  val errorHeader: String?,
+  val canRetry: Boolean
+)
+
+abstract class BaseExperienceActivity : ReactNativeActivity() {
   abstract class ExperienceEvent internal constructor(val experienceKey: ExperienceKey)
 
   class ExperienceForegroundedEvent internal constructor(experienceKey: ExperienceKey) :
@@ -35,7 +42,6 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     isInForeground = true
-    reactRootView = RNObject("com.facebook.react.ReactRootView")
     NativeModuleDepsProvider.instance.inject(BaseExperienceActivity::class.java, this)
   }
 
@@ -90,9 +96,10 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
     }
   }
 
+  @SuppressLint("MissingSuperCall")
   override fun onBackPressed() {
-    if (reactInstanceManager.isNotNull && !isCrashed) {
-      reactInstanceManager.call("onBackPressed")
+    if (!isCrashed) {
+      reactHost?.onBackPressed()
     } else {
       moveTaskToBack(true)
     }
@@ -109,11 +116,9 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
       return
     }
 
-    if (reactInstanceManager.isNotNull) {
-      reactInstanceManager.onHostDestroy()
-      reactInstanceManager.assign(null)
-    }
-    reactRootView.assign(null)
+    reactHost?.onHostDestroy()
+    reactHost = null
+    reactSurface = null
 
     // Fresco leaks ReactApplicationContext
     Fresco.initialize(applicationContext)
@@ -123,8 +128,8 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
 
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
-    if (reactInstanceManager.isNotNull && !isCrashed) {
-      reactInstanceManager.call("onConfigurationChanged", this, newConfig)
+    if (reactHost != null && !isCrashed) {
+      reactHost?.onConfigurationChanged(this)
     }
   }
 
@@ -137,7 +142,7 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
         return@runOnUiThread
       }
       kernel.exponentSharedPreferences.setLong(ExponentSharedPreferences.ExponentSharedPreferencesKey.LAST_FATAL_ERROR_DATE_KEY, System.currentTimeMillis())
-      val (isFatal, errorMessage, errorHeader) = sendErrorsToErrorActivity()
+      val (isFatal, errorMessage, errorHeader, canRetry) = sendErrorsToErrorActivity()
       if (!shouldShowErrorScreen(errorMessage)) {
         return@runOnUiThread
       }
@@ -147,8 +152,8 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
 
       if (!isDebugModeEnabled) {
         removeAllViewsFromContainer()
-        reactInstanceManager.assign(null)
-        reactRootView.assign(null)
+        reactHost = null
+        reactSurface = null
       }
       isCrashed = true
       isLoading = false
@@ -164,6 +169,7 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
           ErrorActivity.DEVELOPER_ERROR_MESSAGE_KEY,
           errorMessage.developerErrorMessage()
         )
+        putExtra(ErrorActivity.CAN_RETRY_KEY, canRetry)
       }
       startActivity(intent)
       EventBus.getDefault().post(ExperienceDoneLoadingEvent(this))
@@ -187,8 +193,9 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
 
     fun addError(error: ExponentError) {
       errorQueue.add(error)
-      if (visibleActivity != null) {
-        visibleActivity!!.consumeErrorQueue()
+      val activity = visibleActivity
+      if (activity != null) {
+        activity.consumeErrorQueue()
       } else if (ErrorActivity.visibleActivity != null) {
         // If ErrorActivity is already started and we get another error from RN.
         sendErrorsToErrorActivity()
@@ -196,10 +203,11 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
       // Otherwise onResume will consumeErrorQueue
     }
 
-    private fun sendErrorsToErrorActivity(): Triple<Boolean, ExponentErrorMessage, String?> {
+    private fun sendErrorsToErrorActivity(): ErrorProcessingResult {
       var isFatal = false
       var errorMessage = developerErrorMessage("")
       var errorHeader: String? = null
+      var canRetry = true
       synchronized(errorQueue) {
         while (!errorQueue.isEmpty()) {
           val error = errorQueue.remove()
@@ -211,9 +219,10 @@ abstract class BaseExperienceActivity : MultipleVersionReactNativeActivity() {
           if (error.isFatal) {
             isFatal = true
           }
+          canRetry = canRetry && error.canRetry
         }
       }
-      return Triple(isFatal, errorMessage, errorHeader)
+      return ErrorProcessingResult(isFatal, errorMessage, errorHeader, canRetry)
     }
   }
 }

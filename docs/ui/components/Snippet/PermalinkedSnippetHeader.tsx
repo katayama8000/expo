@@ -1,12 +1,10 @@
 import { LinkBase } from '@expo/styleguide';
 import React from 'react';
 
-import { SnippetHeader, SnippetHeaderProps } from './SnippetHeader';
-
 import { HeadingType } from '~/common/headingManager';
-import withHeadingManager, {
-  HeadingManagerProps,
-} from '~/components/page-higher-order/withHeadingManager';
+import withHeadingManager, { HeadingManagerProps } from '~/common/withHeadingManager';
+
+import { SnippetHeader, SnippetHeaderProps } from './SnippetHeader';
 
 export const PermalinkedSnippetHeader = withHeadingManager(
   (props: SnippetHeaderProps & HeadingManagerProps) => {
@@ -17,17 +15,19 @@ export const PermalinkedSnippetHeader = withHeadingManager(
       // when paths are too long, generate headers like:
       // android/../AndroidManifest.xml
       sidebarTitle =
-        pathSegments.length > 2
-          ? pathSegments[0] + '/../' + pathSegments[pathSegments.length - 1]
-          : title;
+        pathSegments.length > 2 ? pathSegments[0] + '/../' + pathSegments.at(-1) : title;
     }
     const heading = props.headingManager.addHeading(title, 3, {
       sidebarTitle,
-      sidebarType: HeadingType.CodeFilePath,
+      sidebarType: HeadingType.CODE_FILE_PATH,
     });
 
     return (
-      <LinkBase id={heading.slug} href={'#' + heading.slug} ref={heading.ref}>
+      <LinkBase
+        id={heading.slug}
+        href={'#' + heading.slug}
+        ref={heading.ref}
+        className="scroll-m-4">
         <SnippetHeader {...props} />
       </LinkBase>
     );

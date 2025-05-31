@@ -6,7 +6,7 @@
  */
 import { isJscSafeUrl, toNormalUrl } from 'jsc-safe-url';
 import { MetroConfig, MixedOutput, Module, ReadOnlyGraph, SerializerOptions } from 'metro';
-import sourceMapString from 'metro/src/DeltaBundler/Serializers/sourceMapString';
+import sourceMapStringMod from 'metro/src/DeltaBundler/Serializers/sourceMapString';
 import bundleToString from 'metro/src/lib/bundleToString';
 import { ConfigT, InputConfigT } from 'metro-config';
 
@@ -16,8 +16,10 @@ import {
   serverPreludeSerializerPlugin,
 } from './environmentVariableSerializerPlugin';
 import { ExpoSerializerOptions, baseJSBundle } from './fork/baseJSBundle';
+import { reconcileTransformSerializerPlugin } from './reconcileTransformSerializerPlugin';
 import { getSortedModules, graphToSerialAssetsAsync } from './serializeChunks';
 import { SerialAsset } from './serializerAssets';
+import { treeShakeSerializer } from './treeShakeSerializerPlugin';
 import { env } from '../env';
 
 export type Serializer = NonNullable<ConfigT['serializer']['customSerializer']>;
@@ -39,7 +41,14 @@ export type SerializerConfigOptions = {
 
 // A serializer that processes the input and returns a modified version.
 // Unlike a serializer, these can be chained together.
-export type SerializerPlugin = (...props: SerializerParameters) => SerializerParameters;
+export type SerializerPlugin = (
+  ...props: SerializerParameters
+) => SerializerParameters | Promise<SerializerParameters>;
+
+const sourceMapString =
+  typeof sourceMapStringMod !== 'function'
+    ? sourceMapStringMod.sourceMapString
+    : sourceMapStringMod;
 
 export function withExpoSerializers(
   config: InputConfigT,
@@ -51,6 +60,12 @@ export function withExpoSerializers(
     processors.push(environmentVariableSerializerPlugin);
   }
 
+  // Then tree-shake the modules.
+  processors.push(treeShakeSerializer);
+
+  // Then finish transforming the modules from AST to JS.
+  processors.push(reconcileTransformSerializerPlugin);
+
   return withSerializerPlugins(config, processors, options);
 }
 
@@ -61,20 +76,22 @@ export function withSerializerPlugins(
   processors: SerializerPlugin[],
   options: SerializerConfigOptions = {}
 ): InputConfigT {
-  const originalSerializer = config.serializer?.customSerializer;
+  const expoSerializer = createSerializerFromSerialProcessors(
+    config,
+    processors,
+    config.serializer?.customSerializer ?? null,
+    options
+  );
 
-  return {
-    ...config,
-    serializer: {
-      ...config.serializer,
-      customSerializer: createSerializerFromSerialProcessors(
-        config,
-        processors,
-        originalSerializer ?? null,
-        options
-      ),
-    },
-  };
+  // We can't object-spread the config, it loses the reference to the original config
+  // Meaning that any user-provided changes are not propagated to the serializer config
+
+  // @ts-expect-error TODO(cedric): it's a read only property, but we can actually write it
+  config.serializer ??= {};
+  // @ts-expect-error TODO(cedric): it's a read only property, but we can actually write it
+  config.serializer.customSerializer = expoSerializer;
+
+  return config;
 }
 
 export function createDefaultExportCustomSerializer(
@@ -85,11 +102,31 @@ export function createDefaultExportCustomSerializer(
     entryPoint: string,
     preModules: readonly Module<MixedOutput>[],
     graph: ReadOnlyGraph<MixedOutput>,
-    options: SerializerOptions<MixedOutput>
+    inputOptions: SerializerOptions<MixedOutput>
   ): Promise<string | { code: string; map: string }> => {
     const isPossiblyDev = graph.transformOptions.hot;
     // TODO: This is a temporary solution until we've converged on using the new serializer everywhere.
-    const enableDebugId = options.inlineSourceMap !== true && !isPossiblyDev;
+    const enableDebugId = inputOptions.inlineSourceMap !== true && !isPossiblyDev;
+
+    const context = {
+      platform: graph.transformOptions?.platform,
+      environment: graph.transformOptions?.customTransformOptions?.environment ?? 'client',
+    };
+
+    const options: SerializerOptions<MixedOutput> = {
+      ...inputOptions,
+      createModuleId: (moduleId, ...props) => {
+        if (props.length > 0) {
+          return inputOptions.createModuleId(moduleId, ...props);
+        }
+
+        return inputOptions.createModuleId(
+          moduleId,
+          // @ts-expect-error: context is added by Expo and not part of the upstream Metro implementation.
+          context
+        );
+      },
+    };
 
     let debugId: string | undefined;
     const loadDebugId = () => {
@@ -112,13 +149,11 @@ export function createDefaultExportCustomSerializer(
     let bundleCode: string | null = null;
     let bundleMap: string | null = null;
 
-    if (config.serializer?.customSerializer) {
-      const bundle = await config.serializer?.customSerializer(
-        entryPoint,
-        premodulesToBundle,
-        graph,
-        options
-      );
+    // Only invoke the custom serializer if it's not our serializer
+    // We write the Expo serializer back to the original config object, possibly falling into recursive loops
+    const originalCustomSerializer = unwrapOriginalSerializer(config.serializer?.customSerializer);
+    if (originalCustomSerializer) {
+      const bundle = await originalCustomSerializer(entryPoint, premodulesToBundle, graph, options);
       if (typeof bundle === 'string') {
         bundleCode = bundle;
       } else {
@@ -140,6 +175,35 @@ export function createDefaultExportCustomSerializer(
       ).code;
     }
 
+    const getEnsuredMaps = () => {
+      bundleMap ??= sourceMapString(
+        [...premodulesToBundle, ...getSortedModules([...graph.dependencies.values()], options)],
+        {
+          // TODO: Surface this somehow.
+          excludeSource: false,
+          // excludeSource: options.serializerOptions?.excludeSource,
+          processModuleFilter: options.processModuleFilter,
+          shouldAddToIgnoreList: options.shouldAddToIgnoreList,
+        }
+      );
+
+      return bundleMap;
+    };
+
+    if (!bundleMap && options.sourceUrl) {
+      const url = isJscSafeUrl(options.sourceUrl)
+        ? toNormalUrl(options.sourceUrl)
+        : options.sourceUrl;
+      const parsed = new URL(url, 'http://expo.dev');
+      // Is dev server request for source maps...
+      if (parsed.pathname.endsWith('.map')) {
+        return {
+          code: bundleCode,
+          map: getEnsuredMaps(),
+        };
+      }
+    }
+
     if (isPossiblyDev) {
       if (bundleMap == null) {
         return bundleCode;
@@ -152,18 +216,7 @@ export function createDefaultExportCustomSerializer(
 
     // Exports....
 
-    if (!bundleMap) {
-      bundleMap = sourceMapString(
-        [...premodulesToBundle, ...getSortedModules([...graph.dependencies.values()], options)],
-        {
-          // TODO: Surface this somehow.
-          excludeSource: false,
-          // excludeSource: options.serializerOptions?.excludeSource,
-          processModuleFilter: options.processModuleFilter,
-          shouldAddToIgnoreList: options.shouldAddToIgnoreList,
-        }
-      );
-    }
+    bundleMap ??= getEnsuredMaps();
 
     if (enableDebugId) {
       const mutateSourceMapWithDebugId = (sourceMap: string) => {
@@ -197,12 +250,32 @@ function getDefaultSerializer(
   const defaultSerializer =
     fallbackSerializer ?? createDefaultExportCustomSerializer(config, configOptions);
 
-  return async (
-    ...props: SerializerParameters
+  const expoSerializer = async (
+    entryPoint: string,
+    preModules: readonly Module<MixedOutput>[],
+    graph: ReadOnlyGraph<MixedOutput>,
+    inputOptions: ExpoSerializerOptions
   ): Promise<string | { code: string; map: string }> => {
-    const [, , , options] = props;
+    const context = {
+      platform: graph.transformOptions?.platform,
+      environment: graph.transformOptions?.customTransformOptions?.environment ?? 'client',
+    };
 
-    const customSerializerOptions = options.serializerOptions;
+    const options: ExpoSerializerOptions = {
+      ...inputOptions,
+      createModuleId: (moduleId, ...props) => {
+        if (props.length > 0) {
+          return inputOptions.createModuleId(moduleId, ...props);
+        }
+        return inputOptions.createModuleId(
+          moduleId,
+          // @ts-expect-error: context is added by Expo and not part of the upstream Metro implementation.
+          context
+        );
+      },
+    };
+
+    const customSerializerOptions = inputOptions.serializerOptions;
 
     // Custom options can only be passed outside of the dev server, meaning
     // we don't need to stringify the results at the end, i.e. this is `npx expo export` or `npx expo export:embed`.
@@ -212,6 +285,8 @@ function getDefaultSerializer(
       if (customSerializerOptions) {
         return {
           outputMode: customSerializerOptions.output,
+          splitChunks: customSerializerOptions.splitChunks,
+          usedExports: customSerializerOptions.usedExports,
           includeSourceMaps: customSerializerOptions.includeSourceMaps,
         };
       }
@@ -224,6 +299,8 @@ function getDefaultSerializer(
 
         return {
           outputMode: url.searchParams.get('serializer.output'),
+          usedExports: url.searchParams.get('serializer.usedExports') === 'true',
+          splitChunks: url.searchParams.get('serializer.splitChunks') === 'true',
           includeSourceMaps: url.searchParams.get('serializer.map') === 'true',
         };
       }
@@ -231,7 +308,7 @@ function getDefaultSerializer(
     })();
 
     if (serializerOptions?.outputMode !== 'static') {
-      return defaultSerializer(...props);
+      return defaultSerializer(entryPoint, preModules, graph, options);
     }
 
     // Mutate the serializer options with the parsed options.
@@ -244,9 +321,14 @@ function getDefaultSerializer(
       config,
       {
         includeSourceMaps: !!serializerOptions.includeSourceMaps,
+        splitChunks: !!serializerOptions.splitChunks,
         ...configOptions,
       },
-      ...props
+      entryPoint,
+      preModules,
+      graph,
+
+      options
     );
 
     if (supportsNonSerialReturn) {
@@ -256,6 +338,8 @@ function getDefaultSerializer(
 
     return JSON.stringify(assets);
   };
+
+  return Object.assign(expoSerializer, { __expoSerializer: true });
 }
 
 export function createSerializerFromSerialProcessors(
@@ -265,15 +349,28 @@ export function createSerializerFromSerialProcessors(
   options: SerializerConfigOptions = {}
 ): Serializer {
   const finalSerializer = getDefaultSerializer(config, originalSerializer, options);
-  return (...props: SerializerParameters): ReturnType<Serializer> => {
-    for (const processor of processors) {
-      if (processor) {
-        props = processor(...props);
-      }
-    }
 
-    return finalSerializer(...props);
-  };
+  return wrapSerializerWithOriginal(
+    originalSerializer,
+    async (...props: SerializerParameters): ReturnType<Serializer> => {
+      for (const processor of processors) {
+        if (processor) {
+          props = await processor(...props);
+        }
+      }
+
+      return finalSerializer(...props);
+    }
+  );
+}
+
+function wrapSerializerWithOriginal(original: Serializer | null, expo: Serializer) {
+  return Object.assign(expo, { __originalSerializer: original });
+}
+
+function unwrapOriginalSerializer(serializer?: Serializer | null) {
+  if (!serializer || !('__originalSerializer' in serializer)) return null;
+  return serializer.__originalSerializer as Serializer | null;
 }
 
 export { SerialAsset };

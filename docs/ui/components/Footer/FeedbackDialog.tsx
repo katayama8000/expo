@@ -1,9 +1,10 @@
 import { Button, mergeClasses } from '@expo/styleguide';
-import { CheckIcon, XIcon } from '@expo/styleguide-icons';
+import { CheckIcon } from '@expo/styleguide-icons/outline/CheckIcon';
+import { XIcon } from '@expo/styleguide-icons/outline/XIcon';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useState } from 'react';
 
-import { Callout } from '~/ui/components/Callout';
+import { InlineHelp } from 'ui/components/InlineHelp';
 import { Input, Textarea } from '~/ui/components/Form';
 import { CALLOUT, LABEL, RawH2 } from '~/ui/components/Text';
 
@@ -30,13 +31,12 @@ export const FeedbackDialog = ({ pathname }: Props) => {
       },
       body: JSON.stringify({
         feedback,
-        email: email.length ? email : undefined,
+        email: email.length > 0 ? email : undefined,
         url: pathname,
       }),
     })
       .then(res => res.json())
       .then(res => {
-        console.log(res);
         if (res.errors) {
           setErrors(res.errors);
         } else {
@@ -60,26 +60,26 @@ export const FeedbackDialog = ({ pathname }: Props) => {
           )}>
           <div className="fixed inset-0 bg-[#00000080]" />
         </Dialog.Overlay>
-        <div className="fixed left-0 top-0 z-[1000] flex h-[100vh] w-[100vw] items-center justify-center">
+        <div className="fixed left-0 top-0 z-[1000] flex h-dvh w-dvw items-center justify-center">
           <Dialog.Content
             className={mergeClasses(
               'dialog-content',
-              'backface-hidden left-0 top-0 max-h-[90vh] w-[90vw] max-w-[500px] overflow-hidden break-words rounded-lg border border-default bg-default shadow-md outline-0',
+              'break-words backface-hidden left-0 top-0 max-h-[90vh] w-[90vw] max-w-[500px] overflow-hidden rounded-lg border border-default bg-default shadow-md outline-0',
               'data-[state=open]:animate-slideUpAndFadeIn',
               'data-[state=closed]:animate-fadeOut'
             )}>
             {isSuccess ? (
               <>
-                <div className="px-6 py-12 flex flex-col items-center">
-                  <div className="flex bg-success border-2 border-success size-[72px] rounded-full items-center justify-center">
-                    <CheckIcon className="text-icon-success icon-2xl" />
+                <div className="flex flex-col items-center px-6 py-12">
+                  <div className="flex size-[72px] items-center justify-center rounded-full border-2 border-success bg-success">
+                    <CheckIcon className="icon-2xl text-icon-success" />
                   </div>
-                  <RawH2 className="!mt-5 !mb-2">Feedback received</RawH2>
+                  <RawH2 className="!mb-2 !mt-5">Feedback received</RawH2>
                   <CALLOUT theme="secondary">
                     Your feedback will help us make our docs better. Thanks for sharing!
                   </CALLOUT>
                 </div>
-                <div className="bg-subtle flex justify-end items-center gap-2 min-h-[56px] px-3">
+                <div className="flex min-h-[56px] items-center justify-end gap-2 bg-subtle px-3">
                   <Dialog.Close asChild>
                     <Button type="submit">Done</Button>
                   </Dialog.Close>
@@ -101,7 +101,7 @@ export const FeedbackDialog = ({ pathname }: Props) => {
                   <CALLOUT theme="secondary">
                     Add your feedback to help us improve this doc.
                   </CALLOUT>
-                  <div className="grid gap-4 mt-4">
+                  <div className="mt-4 grid gap-4">
                     <div>
                       <LABEL>Feedback</LABEL>
                       <Textarea
@@ -133,14 +133,14 @@ export const FeedbackDialog = ({ pathname }: Props) => {
                     </div>
                   </div>
                   {errors?.length && (
-                    <Callout type="error">
+                    <InlineHelp type="error">
                       <CALLOUT>
                         {errors.map(error => ('message' in error ? error.message : '')).join('\n')}
                       </CALLOUT>
-                    </Callout>
+                    </InlineHelp>
                   )}
                 </div>
-                <div className="bg-subtle flex justify-end items-center gap-2 min-h-[56px] px-3">
+                <div className="flex min-h-[56px] items-center justify-end gap-2 bg-subtle px-3">
                   <Dialog.Close asChild>
                     <Button theme="quaternary">No Thanks</Button>
                   </Dialog.Close>

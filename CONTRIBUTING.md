@@ -12,26 +12,27 @@
 - [🔎 Before Submitting](#-before-submitting)
   - [Extra Credit](#extra-credit-1)
 
-Thanks for the help! We currently review PRs for `packages/`, `docs/`, `templates/`, `guides/`, `apps/`, and markdown files.
+Thanks for your interest in contributing! We currently review PRs for `packages/`, `docs/`, `templates/`, `guides/`, `apps/`, and markdown files.
 
-We recommend that folks interested in contributing to the SDK use the `apps/bare-expo` project in their SDK development workflow instead of the Expo client. The Expo client itself (in the `ios/` and `android/` directories) are difficult to setup and require API tokens.
+We recommend that folks interested in contributing to the SDK use the `apps/bare-expo` project in their SDK development workflow instead of Expo Go (in `apps/expo-go`). The Expo Go app is difficult to set up and requires API tokens.
 
-The `bare-expo` project includes most of the Expo SDK and runs the JavaScript code from `apps/test-suite` to allow you to easily write and run E2E tests for iOS, and Android for any given SDK package. Unit tests can be written within the SDK package itself. When pushed to the remote, CI will run this project with tests for Android/iOS and report the results on your pull request.
+The `bare-expo` project includes most of the Expo SDK. It runs the JavaScript code from `apps/test-suite` and `apps/native-component-list`. That allows you to browse the Expo SDK components and APIs and easily write and run E2E tests for iOS, and Android for any given SDK package. Unit tests can be written within the SDK package itself. When pushed to the remote, CI will run this project with tests for Android/iOS and report the results on your pull request.
 
-Manual smoke tests are included in `apps/native-component-list`, this is a good fit for demos or tests that require physical interactions. This is particularly useful if you are testing interactions with UI components, or there is something that is very difficult to test in an automated way but would be easy to verify through manual interaction.
+Manual smoke tests are included in `apps/native-component-list`, which is a good fit for demos or tests that require physical interactions. This is particularly useful if you are testing interactions with UI components, or if there is something very difficult to test in an automated way but would be easy to verify through manual interaction.
 
 > 💡 How does `bare-expo` relate to `test-suite`?
 >
-> `bare-expo` is a bare workflow app that links all of the Expo SDK dependencies in the `packages/` directory in order to be able to run projects in the `apps/` directory in the bare workflow rather than the Expo client. It currently only runs `test-suite`. `test-suite` is a regular managed workflow Expo app with some custom code to turn it into a test runner. If you run `expo start` in the `test-suite` directory you can load the project in Expo client. `bare-expo` imports the `test-suite` app root component and uses it as its own root component.
+> `bare-expo` is a bare React Native app that links all of the Expo SDK dependencies in the `packages/` directory in order to be able to run projects in the `apps/` directory. It currently runs `test-suite` (an Expo app with some custom code to turn it into a test runner), and `native-component-list`. If you run `expo start` in the `test-suite` directory you can load the project in Expo Go. `bare-expo` imports the `test-suite` app root component and uses it as its own root component.
 
 ## 📦 Download and Setup
 
 > 💽 The development environment for this repository does not support Windows; WSL is required to contribute from Windows.
 
-1. If you are an Expo team member, clone the repository. If you are an external contributor, [fork](https://help.github.com/articles/fork-a-repo/) this repository to your own GitHub account and then [clone](https://help.github.com/articles/cloning-a-repository/) it to your local device. (`git remote add upstream git@github.com:expo/expo.git` 😉). You can use `git clone --depth 1 --single-branch --branch main git@github.com:expo/expo.git`, discarding most of branches and history to clone it faster.
+1. If you are an Expo team member, clone the repository. If you are an external contributor, [fork](https://help.github.com/articles/fork-a-repo/) this repository to your own GitHub account and then [clone](https://help.github.com/articles/cloning-a-repository/) it to your local device. (`git remote add upstream git@github.com:expo/expo.git` 😉). You can use `git clone --depth 1 --single-branch --branch main git@github.com:expo/expo.git`, skipping most of the branches and history to clone it faster.
 2. Install [direnv](https://direnv.net/). On macOS: `brew install direnv`. Don't forget to install the [shell hook](https://direnv.net/docs/hook.html) to your shell profile.
-3. Install [git-lfs](https://git-lfs.github.com/). On macOS: `brew install git-lfs`.
-4. Install [Node 16 LTS](https://nodejs.org/).
+3. Install Ruby 3.3 or later. On macOS: `brew install ruby@3.3`
+4. Install [git-lfs](https://git-lfs.github.com/). On macOS: `brew install git-lfs`.
+5. Install [Node LTS](https://nodejs.org/).
 
 ### Set up documentation
 
@@ -47,11 +48,14 @@ If you plan to contribute to Android, run `npm run setup:native`. This command d
 - Downloads the Node packages (`yarn install`)
 
 We recommend JDK 17 (eg. zulu17). Run the following commands in a terminal window to install it:
+
 ```sh
 brew tap homebrew/cask-versions
-brew install --cask zulu17
+brew install --cask zulu@17
 ```
-After you install the JDK, add the JAVA_HOME environment variable in ~/.bash_profile (or ~/.zshrc if you use Zsh):
+
+After you install the JDK, add the JAVA_HOME environment variable in ~/.bash_profile (or ~/.zshrc if you use ZSH):
+
 ```sh
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
 ```
@@ -60,7 +64,7 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
 
 ### Set up iOS
 
-If you will be working with the iOS project, ensure **ruby 2.7** is installed on your machine. macOS comes with ruby 2.6, which is not supported in this repository; if you use Homebrew you can just run `brew install ruby@2.7`. You will also need to have the latest stable version of Xcode installed, along with Xcode command line tools.
+If you will be working with the iOS project, ensure **ruby 3.3** is installed on your machine. macOS comes with ruby 2.6, which is not supported in this repository; if you use Homebrew you can just run `brew install ruby@3.3`. You will also need to have the latest stable version of Xcode installed, along with Xcode command line tools.
 
 ### Verify native installation is successful
 
@@ -80,7 +84,7 @@ If you will be working with the iOS project, ensure **ruby 2.7** is installed on
 All Expo SDK packages can be found in the `packages/` directory. These packages are automatically linked to the projects in the `apps/` directory, so you can edit them in-place and see the changes in the running app.
 
 1. Navigate to a package you want to edit. Ex: `cd packages/expo-constants`
-2. Start the TypeScript build in watch mode: `yarn build`
+2. Start the TypeScript build in watch mode: `yarn build` (skip this if such script is not present)
 3. Edit code in that package's `src/` directory
 4. Play with your changes on a simulator or device through `bare-expo`:
    - Add or modify a file named after the API you're working on. Ex: `apps/test-suite/tests/Constants.js`
@@ -92,18 +96,19 @@ All Expo SDK packages can be found in the `packages/` directory. These packages 
    - Android Studio: `yarn edit:android`
    - Xcode: `yarn edit:ios`
    - Remember to **rebuild** the native project whenever you make a native change
+6. (optional) Package docs are partially generated from sources. Run `et generate-docs-api-data -p <package-name>` to generate the package docs [read more](#-updating-documentation).
 
 ### Finding a task to work on
 
 If you don't have something in mind already, the best way to find something to help with is ["Issue accepted" label](https://github.com/expo/expo/issues?q=is%3Aissue+is%3Aopen+label%3A%22Issue+accepted%22).
 
-Note that we generally do not accept PRs that bump versions of native dependencies. The Expo team handles bumping these dependencies as part of our release process for each Expo SDK. The process for pulling in a new version and adequately requires a fair amount of context on how Expo Go works.
+Note that we generally do not accept PRs that bump versions of native dependencies. The Expo team handles bumping these dependencies as part of our release process for each Expo SDK. The process for pulling in a new version requires a fair amount of context on how Expo Go works.
 
 ### Style
 
 All modules should adhere to the style guides which can be found here:
 
-- [Guide to Unimodule Development](guides/Expo%20Universal%20Module%20Infrastructure.md)
+- [Creating Unimodules](guides/Creating%20Unimodules.md)
 - [Expo JS Style Guide](guides/Expo%20JavaScript%20Style%20Guide.md) (also mostly applies to TypeScript)
 - [Updating Changelogs](guides/contributing/Updating%20Changelogs.md)
 
@@ -111,7 +116,7 @@ All modules should adhere to the style guides which can be found here:
 
 - The React Native dev tools are currently disabled in our fork [#5602](https://github.com/expo/expo/issues/5602). You can hack around this by cloning React Native outside this repo, then copying the contents `react-native/React/DevSupport` into `expo/react-native-lab/react-native/React/DevSupport` (this will only enable the shake gesture, CMD+R won't work yet).
 - We use a fork of `react-native` in this repo; this fork is located at `react-native-lab/react-native` (you can make changes or cherry-picks from here if you want). It diverges the minimal amount necessary from the `react-native` version in its `package.json`.
-- All of the package's `build/` code should be committed. This is because it is simpler to reproduce issues if all contributors are running the same code and so we don't need to rebuild dozen of packages locally on every `git pull` or `git checkout` operation.
+- All of the package's `build/` code should be committed. This is because it is simpler to reproduce issues if all contributors are running the same code and so we don't need to rebuild dozens of packages locally on every `git pull` or `git checkout` operation.
 - We use a unified set of basic Bash scripts and configs called `expo-module-scripts` to ensure everything runs smoothly (TypeScript, Babel, Jest, etc...).
 
 ## ⏱ Testing Your Changes
@@ -141,37 +146,45 @@ Thanks again for helping to make sure that Expo is stable for everyone!
 
 ## 📚 Updating Documentation
 
-Our docs are made with [Next.js](https://github.com/vercel/next.js). They're located in the **docs/** directory. For more information look at the [`docs/README.md`](/docs/README.md).
+Our docs are made with [Next.js](https://github.com/vercel/next.js). They're located in the **docs** directory. For more information look at the [**docs/README.md**](/docs/README.md).
 
 **TL;DR:**
 
-1. Navigate to the **docs/** directory and run `yarn`.
-2. Start the project with `yarn dev` (make sure you don't have another server running on port `3002`).
+Note: Running docs yarn commands requires a specific version of Node. You can find this version under the `volta` section in [./docs/package.json](./docs/package.json).
+
+1. Navigate to the **docs** directory and run `yarn`.
+2. Start the project with `yarn dev` (make sure you don't have another server running on port `3002`). Note: Requires Node `22.13.1` or higher. 
 3. Navigate to the docs you want to edit: `cd docs/pages/`.
 4. If you update an older version, ensure the relevant changes are copied into `docs/pages/versions/unversioned/` for API docs.
+5. Package API docs are generated from sources. To regenerate the docs, run `et generate-docs-api-data -p <package-name>` (for the next SDK version) or `et generate-docs-api-data -p <package-name> -s <number>` (for a specific SDK version).
 
 ## 📝 Writing a Commit Message
 
 > If this is your first time committing to a large public repo, you could look through this neat tutorial: ["How to Write a Git Commit Message"](https://chris.beams.io/posts/git-commit/)
 
-Commit messages are most useful when formatted like so: `[platform][api] Title`. For example if you fix a bug in the package `expo-video` for iOS, you could write: `[ios][video] Fixed black screen bug that appears on older devices`.
+Commit messages are most useful when formatted like so: `[platform][api] Title`. For example, if you fix a bug in the package `expo-video` for iOS, you could write: `[ios][video] Fixed black screen bug that appears on older devices`.
 
 ## 🔎 Before Submitting
 
-To help keep CI green, please make sure of the following:
-
 - Remember to add a concise description of any user-facing changes to `CHANGELOG.md` file in the package you've changed or [root's CHANGELOG.md](/CHANGELOG.md) if your changes don't apply to any package. This is especially helpful for breaking changes!
-- If you modified anything in `packages/`:
+
+To keep CI green, please make sure of the following:
+
+### If you modified anything in `packages/`:
+
   - You transpiled the TypeScript with `yarn build` in the directory of whichever package you modified.
   - Run `yarn lint --fix` to fix the formatting of the code. Ensure that `yarn lint` succeeds without errors or warnings.
   - Run `yarn test` to ensure all existing tests pass for that package, along with any new tests you would've written.
-  - All `console.log`s or commented out code blocks are removed! :]
-- If you edited the `docs/`:
+  - (optional) Package docs are partially generated from sources. Run `et generate-docs-api-data -p <package-name>` to generate the package docs [read more](#-updating-documentation).
+  - All `console.log`s or commented out code blocks are removed!
+
+### If you edited the docs directory:
+
   - Any change to the current SDK version should also be in the unversioned copy as well. Example:
     - You fixed a typo in `docs/pages/versions/vXX.0.0/sdk/app-auth.md`
     - Ensure you copy that change to: `docs/pages/versions/unversioned/sdk/app-auth.md`
-  - You don't need to run the docs tests locally. Just ensure the links you include aren't broken, and the format is correct!
+  - You don't need to run the docs tests locally. Just ensure the links you include aren't broken, the format is correct, and the changes are following our [writing style guide](/guides/Expo%20Documentation%20Writing%20Style%20Guide.md).
 
 ### Extra Credit
 
-- Our CI tests will finish early if you didn't make changes to certain directories. If you want to **get results faster** then you should make changes to `docs/` in one PR, and changes to anything else in another!
+- Our CI tests will finish early if you don't make changes to certain directories. If you want to **get results faster** then you should make changes to **docs** directory in one PR, and changes to anything else in another!

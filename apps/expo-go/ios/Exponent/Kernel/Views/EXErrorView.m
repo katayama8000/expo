@@ -7,6 +7,7 @@
 #import "EXKernelAppRecord.h"
 #import "EXManifestResource.h"
 #import "EXUtil.h"
+#import "Expo_Go-Swift.h"
 
 @import EXManifests;
 
@@ -20,6 +21,9 @@
 @property (nonatomic, strong) IBOutlet UILabel *lblUrl;
 @property (nonatomic, strong) IBOutlet UITextView *txtErrorDetail;
 @property (nonatomic, strong) IBOutlet UIScrollView *vContainer;
+@property (nonatomic, strong) IBOutlet UILabel *lblFixHeader;
+@property (nonatomic, strong) IBOutlet UITextView *txtFixDetail;
+
 
 - (void)_onTapRetry;
 
@@ -38,7 +42,10 @@
 
     [_txtErrorDetail setTextContainerInset:UIEdgeInsetsZero];
     _txtErrorDetail.textContainer.lineFragmentPadding = 0;
-    
+
+    [_txtFixDetail setTextContainerInset:UIEdgeInsetsZero];
+    _txtFixDetail.textContainer.lineFragmentPadding = 0;
+
     for (UIButton *btnToStyle in @[ _btnRetry, _btnBack ]) {
       btnToStyle.layer.cornerRadius = 4.0;
       btnToStyle.layer.masksToBounds = YES;
@@ -77,7 +84,10 @@
   _error = error;
   NSString *errorHeader = [EXManifestResource formatHeader:error];
   NSString *errorDetail = [error localizedDescription];
-  
+  NSString *errorFixInstructions = [error userInfo][EXFixInstructionsKey];
+  NSNumber *showTryAgainButtonNumber = [error userInfo][EXShowTryAgainButtonKey];
+  Boolean showTryAgainButton = [showTryAgainButtonNumber boolValue];
+
   if (errorHeader != nil) {
     _lblError.text = errorHeader;
   }
@@ -104,12 +114,38 @@
       break;
     }
   }
-  NSAttributedString *attributedErrorString = [EXManifestResource addErrorStringHyperlinks:errorDetail];
 
   UIFont *font = _txtErrorDetail.font;
-  _txtErrorDetail.attributedText = attributedErrorString;
-  _txtErrorDetail.font = font;
+  if (errorDetail != nil) {
+    NSAttributedString *attributedErrorString =[[NSAttributedString alloc] initWithString:errorDetail];
+    attributedErrorString = [EXManifestResource parseUrlsAndBoldInAttributedString:attributedErrorString withFont:font];
+    _txtErrorDetail.attributedText = attributedErrorString;
+  }
   _txtErrorDetail.textColor = [UIColor colorNamed:@"textDefault"];
+
+  if (errorFixInstructions != nil) {
+    NSAttributedString *attributedFixInstructions = [[NSAttributedString alloc] initWithString:errorFixInstructions];
+    attributedFixInstructions = [EXManifestResource parseUrlsAndBoldInAttributedString:attributedFixInstructions withFont:font];
+    _txtFixDetail.attributedText = attributedFixInstructions;
+    _txtFixDetail.textColor = [UIColor colorNamed:@"textDefault"];
+  } else {
+    [_lblFixHeader removeFromSuperview];
+    [_txtFixDetail removeFromSuperview];
+  }
+
+  if (!showTryAgainButton) {
+    [_btnRetry removeFromSuperview];
+  }
+  
+  // Send error to cli/packager
+  if (errorHeader != nil && errorDetail != nil) {
+    NSString* cleanedDetails = [errorDetail stringByReplacingOccurrencesOfString:@"**" withString:@""];
+    if (errorFixInstructions != nil) {
+      [EXPackagerLogHelper logError:[NSString stringWithFormat:@"%@\n\n%@\n\nHow to fix this error:\n\n%@", errorHeader, cleanedDetails, errorFixInstructions] withBundleUrl:_appRecord.appLoader.manifestUrl];
+    } else {
+      [EXPackagerLogHelper logError:[NSString stringWithFormat:@"%@\n\n%@", errorHeader, cleanedDetails] withBundleUrl:_appRecord.appLoader.manifestUrl];
+    }
+  }
 
   [self _resetUIState];
 }

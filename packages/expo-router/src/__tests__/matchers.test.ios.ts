@@ -1,10 +1,10 @@
 import {
   matchDynamicName,
-  matchDeepDynamicRouteName,
   getNameFromFilePath,
   matchGroupName,
   stripGroupSegmentsFromPath,
   matchArrayGroupName,
+  matchLastGroupName,
 } from '../matchers';
 
 describe(stripGroupSegmentsFromPath, () => {
@@ -38,25 +38,53 @@ describe(matchGroupName, () => {
     expect(matchGroupName('leading/(...foobar)/trailing')).toEqual('...foobar');
     expect(matchGroupName('leading/(foo,bar)/trailing)')).toEqual('foo,bar');
     expect(matchGroupName('leading/(foo,bar)/(fruit,apple)')).toEqual('foo,bar');
+    expect(matchGroupName('leading/(foo bar)/trailing')).toEqual('foo bar');
+  });
+});
+describe(matchLastGroupName, () => {
+  it(`matches`, () => {
+    expect(matchLastGroupName('[[...foobar]]')).toEqual(undefined);
+    expect(matchLastGroupName('[[foobar]]')).toEqual(undefined);
+    expect(matchLastGroupName('[...foobar]')).toEqual(undefined);
+    expect(matchLastGroupName('[foobar]')).toEqual(undefined);
+    expect(matchLastGroupName('(foobar)')).toEqual('foobar');
+    expect(matchLastGroupName('(foo,bar)')).toEqual('foo,bar');
+    expect(matchLastGroupName('((foobar))')).toEqual('(foobar)');
+    expect(matchLastGroupName('(...foobar)')).toEqual('...foobar');
+    expect(matchLastGroupName('foobar')).toEqual(undefined);
+    expect(matchLastGroupName('leading/foobar')).toEqual(undefined);
+    expect(matchLastGroupName('(leading)/(foobar)')).toEqual('foobar');
+    expect(matchLastGroupName('(leading)/((foobar))')).toEqual('(foobar)');
+    expect(matchLastGroupName('(leading)/(...foobar)')).toEqual('...foobar');
+    expect(matchLastGroupName('(leading)/(foo,bar)')).toEqual('foo,bar');
+    expect(matchLastGroupName('(leading)/foobar/trailing')).toEqual('leading');
+    expect(matchLastGroupName('(leading)/(foobar)/trailing')).toEqual('foobar');
+    expect(matchLastGroupName('(leading)/((foobar))/trailing')).toEqual('(foobar)');
+    expect(matchLastGroupName('(leading)/(...foobar)/trailing')).toEqual('...foobar');
+    expect(matchLastGroupName('(leading)/(foo,bar)/trailing)')).toEqual('foo,bar');
+    expect(matchLastGroupName('(leading)/(foo,bar)/(fruit,apple)')).toEqual('fruit,apple');
+    expect(matchLastGroupName('(leading)/(foo,bar)/preceding(fruit,apple)')).toEqual('foo,bar');
+    expect(matchLastGroupName('(leading)/(foo,bar)/preceding(fruit,apple)trailing')).toEqual(
+      'foo,bar'
+    );
+    expect(matchLastGroupName('leading/(app)/(foo/,bar)')).toEqual('app');
+    expect(matchLastGroupName('leading/(app)/(foo(,bar)')).toEqual('foo(,bar');
+    expect(matchLastGroupName('leading/(app)/(foo(,bar)/trailing')).toEqual('foo(,bar');
+    expect(matchLastGroupName('leading/(foo bar)/trailing')).toEqual('foo bar');
   });
 });
 describe(matchDynamicName, () => {
-  it(`matches`, () => {
+  it(`matches dynamic names`, () => {
     expect(matchDynamicName('[[...foobar]]')).toEqual(undefined);
     expect(matchDynamicName('[[foobar]]')).toEqual(undefined);
-    expect(matchDynamicName('[...foobar]')).toEqual(undefined);
-    expect(matchDynamicName('[foobar]')).toEqual('foobar');
+    expect(matchDynamicName('[foobar]')).toEqual({ name: 'foobar', deep: false });
     expect(matchDynamicName('foobar')).toEqual(undefined);
   });
-});
 
-describe(matchDeepDynamicRouteName, () => {
-  it(`matches`, () => {
-    expect(matchDeepDynamicRouteName('[[...foobar]]')).toEqual(undefined);
-    expect(matchDeepDynamicRouteName('[[foobar]]')).toEqual(undefined);
-    expect(matchDeepDynamicRouteName('[...foobar]')).toEqual('foobar');
-    expect(matchDeepDynamicRouteName('[foobar]')).toEqual(undefined);
-    expect(matchDeepDynamicRouteName('foobar')).toEqual(undefined);
+  it(`matches deep dynamic names`, () => {
+    expect(matchDynamicName('[[...foobar]]')).toEqual(undefined);
+    expect(matchDynamicName('[[foobar]]')).toEqual(undefined);
+    expect(matchDynamicName('[...foobar]')).toEqual({ name: 'foobar', deep: true });
   });
 });
 

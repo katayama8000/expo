@@ -1,130 +1,240 @@
-import fs from 'node:fs';
-import path from 'path';
-
 import { RouteNode } from '../Route';
 import { getRoutes } from '../getRoutes';
-import { isTypedRoute, removeSupportedExtensions } from '../matchers';
+import { removeSupportedExtensions } from '../matchers';
 import { RequireContext } from '../types';
 
 // /[...param1]/ - Match [...param1]
 const CATCH_ALL = /\[\.\.\..+?\]/g;
 // /[param1] - Match [param1]
 const SLUG = /\[.+?\]/g;
+// /(group)/path/(group2)/route - Match [(group), (group2)]
+const GROUP = /(?:^|\/)\(.*?\)/g;
 
-export function getTypedRoutesDeclarationFile(ctx: RequireContext) {
-  const staticRoutes = new Set<string>();
-  const dynamicRoutes = new Set<string>();
-  const dynamicRouteContextKeys = new Set<string>();
+const urlParams = "${`?${string}` | `#${string}` | ''}";
 
-  walkRouteNode(
-    getRoutes(ctx, {
-      ignoreEntryPoints: true,
-      ignoreRequireErrors: true,
-      importMode: 'async',
-    }),
-    staticRoutes,
-    dynamicRoutes,
-    dynamicRouteContextKeys
-  );
-
-  // If the user has expo-router v3+ installed, we can use the types from the package
-  return (
-    fs
-      .readFileSync(path.join(__dirname, '../../types/expo-router.d.ts'), 'utf-8')
-      // Swap from being a namespace to a module
-      .replace('declare namespace ExpoRouter {', `declare module "expo-router" {`)
-      // Add the route values
-      .replace(
-        'type StaticRoutes = string;',
-        `type StaticRoutes = ${setToUnionType(staticRoutes)};`
-      )
-      .replace(
-        'type DynamicRoutes<T extends string> = string;',
-        `type DynamicRoutes<T extends string> = ${setToUnionType(dynamicRoutes)};`
-      )
-      .replace(
-        'type DynamicRouteTemplate = never;',
-        `type DynamicRouteTemplate = ${setToUnionType(dynamicRouteContextKeys)};`
-      )
-  );
-}
-
-/**
- * Walks a RouteNode tree and adds the routes to the provided sets
- */
-function walkRouteNode(
-  routeNode: RouteNode | null,
-  staticRoutes: Set<string>,
-  dynamicRoutes: Set<string>,
-  dynamicRouteContextKeys: Set<string>
-) {
-  if (!routeNode) return;
-
-  addRouteNode(routeNode, staticRoutes, dynamicRoutes, dynamicRouteContextKeys);
-
-  for (const child of routeNode.children) {
-    walkRouteNode(child, staticRoutes, dynamicRoutes, dynamicRouteContextKeys);
-  }
-}
-
-/**
- * Given a RouteNode, adds the route to the correct sets
- * Modifies the RouteNode.route to be a typed-route string
- */
-function addRouteNode(
-  routeNode: RouteNode | null,
-  staticRoutes: Set<string>,
-  dynamicRoutes: Set<string>,
-  dynamicRouteContextKeys: Set<string>
-) {
-  if (!routeNode?.route) return;
-  if (!isTypedRoute(routeNode.route)) return;
-
-  let routePath = `${removeSupportedExtensions(routeNode.route).replace(/\/?index$/, '')}`; // replace /index with /
-
-  if (!routePath.startsWith('/')) {
-    routePath = `/${routePath}`;
-  }
-
-  if (routeNode.dynamic) {
-    for (const path of generateCombinations(routePath)) {
-      dynamicRouteContextKeys.add(path);
-      dynamicRoutes.add(
-        `${path
-          .replaceAll(CATCH_ALL, '${CatchAllRoutePart<T>}')
-          .replaceAll(SLUG, '${SingleRoutePart<T>}')}`
-      );
-    }
-  } else {
-    for (const combination of generateCombinations(routePath)) {
-      staticRoutes.add(combination);
-    }
-  }
-}
-
-/**
- * Converts a Set to a TypeScript union type
- */
-const setToUnionType = <T>(set: Set<T>) => {
-  return set.size > 0 ? [...set].map((s) => `\`${s}\``).join(' | ') : 'never';
+export type GetTypedRoutesDeclarationFileOptions = {
+  partialTypedGroups?: boolean;
+  testIgnoreComments?: boolean;
 };
 
-function generateCombinations(pathname) {
-  const groups = pathname.split('/').filter((part) => part.startsWith('(') && part.endsWith(')'));
-  const combinations: string[] = [];
+export function getTypedRoutesDeclarationFile(
+  ctx: RequireContext,
+  {
+    partialTypedGroups = false,
+    testIgnoreComments = false,
+  }: GetTypedRoutesDeclarationFileOptions = {}
+) {
+  let routeNode: RouteNode | null = null;
 
-  function generate(currentIndex, currentPath) {
-    if (currentIndex === groups.length) {
-      combinations.push(currentPath.replace(/\/{2,}/g, '/'));
-      return;
-    }
-
-    const group = groups[currentIndex];
-    const withoutGroup = currentPath.replace(group, '');
-    generate(currentIndex + 1, withoutGroup);
-    generate(currentIndex + 1, currentPath);
+  try {
+    routeNode = getRoutes(ctx, {
+      ignore: [/_layout\.[tj]sx?$/], // Skip layout files
+      platformRoutes: false, // We don't need to generate platform specific routes
+      notFound: false, // We don't need +not-found routes either
+      ignoreEntryPoints: true,
+      ignoreRequireErrors: true,
+      importMode: 'async', // Don't load the file
+    });
+  } catch {
+    // Ignore errors from `getRoutes`. This is also called inside the app, which has
+    // a nicer UX for showing error messages
   }
 
-  generate(0, pathname);
-  return combinations;
+  const groupedNodes = groupRouteNodes(routeNode);
+  const staticRoutesStrings: string[] = ['Router.RelativePathString', 'Router.ExternalPathString'];
+  const staticRouteInputObjects: string[] = [
+    '{ pathname: Router.RelativePathString, params?: Router.UnknownInputParams }',
+    '{ pathname: Router.ExternalPathString, params?: Router.UnknownInputParams }',
+  ];
+  const staticRouteOutputObjects: string[] = [
+    '{ pathname: Router.RelativePathString, params?: Router.UnknownOutputParams }',
+    '{ pathname: Router.ExternalPathString, params?: Router.UnknownOutputParams }',
+  ];
+
+  for (const type of groupedNodes.static) {
+    staticRoutesStrings.push(contextKeyToType(type + urlParams, partialTypedGroups));
+    staticRouteInputObjects.push(
+      `{ pathname: ${contextKeyToType(type, partialTypedGroups)}; params?: Router.UnknownInputParams; }`
+    );
+    staticRouteOutputObjects.push(
+      `{ pathname: ${contextKeyToType(type, partialTypedGroups)}; params?: Router.UnknownOutputParams; }`
+    );
+  }
+
+  const dynamicRouteStrings: string[] = [];
+  const dynamicRouteInputObjects: string[] = [];
+  const dynamicRouteOutputObjects: string[] = [];
+
+  for (const [dynamicRouteTemplate, paramsNames] of groupedNodes.dynamic) {
+    const inputParams = paramsNames
+      .map((param) => {
+        const key = param.startsWith('...') ? param.slice(3) : param;
+        const value = param.startsWith('...') ? '(string | number)[]' : 'string | number';
+        return `${contextKeyToProperty(key)}: ${value};`;
+      })
+      .join('');
+
+    const outputParams = paramsNames
+      .map((param) => {
+        const key = param.startsWith('...') ? param.slice(3) : param;
+        const value = param.startsWith('...') ? 'string[]' : 'string';
+        return `${contextKeyToProperty(key)}: ${value};`;
+      })
+      .join('');
+
+    dynamicRouteStrings.push(
+      contextKeyToType(
+        dynamicRouteTemplate
+          .replaceAll(CATCH_ALL, '${string}')
+          .replaceAll(SLUG, '${Router.SingleRoutePart<T>}'),
+        partialTypedGroups
+      )
+    );
+
+    dynamicRouteInputObjects.push(
+      `{ pathname: ${contextKeyToType(dynamicRouteTemplate, partialTypedGroups)}, params: Router.UnknownInputParams & { ${inputParams} } }`
+    );
+    dynamicRouteOutputObjects.push(
+      `{ pathname: ${contextKeyToType(dynamicRouteTemplate, partialTypedGroups)}, params: Router.UnknownOutputParams & { ${outputParams} } }`
+    );
+  }
+
+  const href = [
+    ...staticRoutesStrings,
+    ...staticRouteInputObjects,
+    ...dynamicRouteStrings,
+    ...dynamicRouteInputObjects,
+  ].join(' | ');
+
+  const hrefInputParams = [...staticRouteInputObjects, ...dynamicRouteInputObjects].join(' | ');
+  const hrefOutputParams = [...staticRouteOutputObjects, ...dynamicRouteOutputObjects].join(' | ');
+
+  const tsExpectError = testIgnoreComments
+    ? '// @ts-ignore-error -- During tests we need to ignore the "duplicate" declaration error, as multiple fixture declare types \n      '
+    : '';
+
+  return `/* eslint-disable */
+import * as Router from 'expo-router';
+
+export * from 'expo-router';
+
+declare module 'expo-router' {
+  export namespace ExpoRouter {
+    export interface __routes<T extends string | object = string> {
+      ${tsExpectError}hrefInputParams: ${hrefInputParams};
+      ${tsExpectError}hrefOutputParams: ${hrefOutputParams};
+      ${tsExpectError}href: ${href};
+    }
+  }
+}
+`;
+}
+
+function groupRouteNodes(
+  routeNode: RouteNode | null,
+  groupedContextKeys = {
+    static: new Set<string>(),
+    dynamic: new Map<string, string[]>(),
+  }
+) {
+  if (!routeNode) {
+    return groupedContextKeys;
+  }
+
+  // Skip non-route files
+  if (routeNode.type !== 'route') {
+    // Except the root layout
+    if (routeNode.route === '') {
+      for (const child of routeNode.children) {
+        groupRouteNodes(child, groupedContextKeys);
+      }
+      return groupedContextKeys;
+    }
+
+    return groupedContextKeys;
+  }
+
+  let routeKey: string;
+
+  if (routeNode.generated) {
+    // Some routes like the root _layout, _sitemap, +not-found are generated.
+    // We cannot use the contextKey, as their context key does not specify a route
+    routeKey = routeNode.route;
+  } else {
+    routeKey = removeSupportedExtensions(routeNode.contextKey)
+      .replace(/\/index$/, '') // Remove any trailing /index
+      .replace(/^\./, ''); // Remove any leading .
+  }
+
+  routeKey ||= '/'; // A routeKey may be empty for contextKey '' or './index.js'
+
+  if (!routeKey.startsWith('/')) {
+    // Not all generated files will have the `/` prefix
+    routeKey = `/${routeKey}`;
+  }
+
+  routeKey = routeKey.replace(/\\/g, '/');
+
+  if (routeNode.dynamic) {
+    groupedContextKeys.dynamic.set(
+      routeKey,
+      routeKey
+        .split('/')
+        .filter((segment) => {
+          return segment.startsWith('[') && segment.endsWith(']');
+        })
+        .map((segment) => {
+          return segment.slice(1, -1);
+        })
+    );
+  } else {
+    groupedContextKeys.static.add(routeKey);
+  }
+
+  for (const child of routeNode.children) {
+    groupRouteNodes(child, groupedContextKeys);
+  }
+
+  return groupedContextKeys;
+}
+
+function contextKeyToProperty(contextKey: string) {
+  return !/^(?!\d)[\w$]+$/.test(contextKey) ? JSON.stringify(contextKey) : contextKey;
+}
+
+function contextKeyToType(contextKey: string, partialTypedGroups: boolean) {
+  if (contextKey.match(GROUP) === null) {
+    return `\`${contextKey}\``;
+  }
+
+  // If the route has groups, turn them into template strings
+  const typeWithGroups = contextKey.replaceAll(GROUP, (match) => {
+    const groups = match.slice(2, -1); // Remove the leading ( and the trailing )
+    // When `partialRoutes` is enabled, we always change a group to a template
+    if (groups.length > 1 || partialTypedGroups) {
+      // Ensure each group has the trailing slash
+      const groupsAsType = groups.split(',').map((group) => `'/(${group})'`);
+      // `partialRoutes` allow you to skip a group
+      if (partialTypedGroups) {
+        groupsAsType.push("''");
+      }
+      // Combine together into a union
+      return `\${${groupsAsType.join(' | ')}}`;
+    } else {
+      return match;
+    }
+  });
+
+  let typeWithoutGroups = contextKey.replaceAll(GROUP, '') || '/';
+
+  /**
+   * When getting the static routes, they include a urlParams string at the end.
+   * If we have a route like `/(group)/(group2)`, this would normally be collapsed to `/`.
+   * But because of the urlParams, it becomes `${urlParams}` and we need to add a `/` to the start.
+   */
+  if (typeWithoutGroups.startsWith(urlParams)) {
+    typeWithoutGroups = `/${typeWithoutGroups}`;
+  }
+
+  return `\`${typeWithGroups}\` | \`${typeWithoutGroups}\``;
 }

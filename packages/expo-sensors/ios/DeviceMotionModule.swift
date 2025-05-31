@@ -31,6 +31,28 @@ public final class DeviceMotionModule: Module {
       motionManager.deviceMotionUpdateInterval = intervalMs / 1000.0
     }
 
+    AsyncFunction("getPermissionsAsync") { (promise: Promise) in
+      guard let permissionsManager = appContext?.permissions else {
+        return
+      }
+      permissionsManager.getPermissionUsingRequesterClass(
+        EXMotionPermissionRequester.self,
+        resolve: promise.resolver,
+        reject: promise.legacyRejecter
+      )
+    }
+
+    AsyncFunction("requestPermissionsAsync") { (promise: Promise) in
+      guard let permissionsManager = appContext?.permissions else {
+        return
+      }
+      permissionsManager.askForPermission(
+        usingRequesterClass: EXMotionPermissionRequester.self,
+        resolve: promise.resolver,
+        reject: promise.legacyRejecter
+      )
+    }
+
     OnStartObserving {
       startDeviceMotionUpdates()
     }
@@ -41,6 +63,13 @@ public final class DeviceMotionModule: Module {
 
     OnDestroy {
       motionManager.stopDeviceMotionUpdates()
+    }
+
+    OnCreate {
+      guard let permissionsManager = appContext?.permissions else {
+        return
+      }
+      permissionsManager.register([EXMotionPermissionRequester()])
     }
   }
 
@@ -62,22 +91,26 @@ public final class DeviceMotionModule: Module {
         "acceleration": [
           "x": userAcceleration.x * GRAVITY,
           "y": userAcceleration.y * GRAVITY,
-          "z": userAcceleration.z * GRAVITY
+          "z": userAcceleration.z * GRAVITY,
+          "timestamp": data.timestamp
         ],
         "accelerationIncludingGravity": [
           "x": (userAcceleration.x + data.gravity.x) * GRAVITY,
           "y": (userAcceleration.y + data.gravity.y) * GRAVITY,
-          "z": (userAcceleration.z + data.gravity.z) * GRAVITY
+          "z": (userAcceleration.z + data.gravity.z) * GRAVITY,
+          "timestamp": data.timestamp
         ],
         "rotation": [
           "alpha": attitude.yaw,
           "beta": attitude.pitch,
-          "gamma": attitude.roll
+          "gamma": attitude.roll,
+          "timestamp": data.timestamp
         ],
         "rotationRate": [
           "alpha": radiansToDegrees(rotationRate.z),
           "beta": radiansToDegrees(rotationRate.y),
-          "gamma": radiansToDegrees(rotationRate.x)
+          "gamma": radiansToDegrees(rotationRate.x),
+          "timestamp": data.timestamp
         ],
         "orientation": getDeviceOrientationRotation(),
         "interval": Double(self.motionManager.deviceMotionUpdateInterval)

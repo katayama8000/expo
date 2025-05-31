@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createFingerprintForBuildAsync = void 0;
+exports.createFingerprintForBuildAsync = createFingerprintForBuildAsync;
 const config_1 = require("@expo/config");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -31,22 +31,24 @@ async function createFingerprintForBuildAsync(platform, possibleProjectRoot, des
         // normal runtime versions don't need fingerprinting
         return;
     }
-    if (runtimeVersion.policy !== 'fingerprintExperimental') {
+    if (runtimeVersion.policy !== 'fingerprint') {
         // not a policy that needs fingerprinting
         return;
     }
     let fingerprint;
-    const override = process.env.EXPO_UPDATES_FINGERPRINT_OVERRIDE;
-    if (override) {
-        console.log(`Using fingerprint from EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${override}`);
-        fingerprint = { hash: override };
+    const fingerprintOverride = process.env.EXPO_UPDATES_FINGERPRINT_OVERRIDE;
+    if (fingerprintOverride) {
+        console.log(`Using fingerprint from EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${fingerprintOverride}`);
+        fingerprint = { hash: fingerprintOverride };
     }
     else {
-        const workflow = await (0, workflow_1.resolveWorkflowAsync)(projectRoot, platform);
+        const workflowOverride = process.env.EXPO_UPDATES_WORKFLOW_OVERRIDE;
+        const workflow = workflowOverride
+            ? (0, workflow_1.validateWorkflow)(workflowOverride)
+            : await (0, workflow_1.resolveWorkflowAsync)(projectRoot, platform);
         const createdFingerprint = await (0, createFingerprintAsync_1.createFingerprintAsync)(projectRoot, platform, workflow, {});
-        console.log(JSON.stringify(createdFingerprint.sources));
+        console.log(JSON.stringify(createdFingerprint));
         fingerprint = createdFingerprint;
     }
     fs_1.default.writeFileSync(path_1.default.join(destinationDir, 'fingerprint'), fingerprint.hash);
 }
-exports.createFingerprintForBuildAsync = createFingerprintForBuildAsync;

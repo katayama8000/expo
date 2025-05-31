@@ -8,11 +8,62 @@
 
 ### 🐛 Bug fixes
 
+### 💡 Others
+
+## 12.1.4 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 12.1.3 — 2025-04-25
+
+_This version does not introduce any user-facing changes._
+
+## 12.1.2 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 12.1.1 — 2025-04-09
+
+_This version does not introduce any user-facing changes._
+
+## 12.1.0 — 2025-04-04
+
+### 🎉 New features
+
+- Added a synchronous function `openApplication` to open an application by its package name. ([#25468](https://github.com/expo/expo/pull/25468) by [@reichhartd](https://github.com/reichhartd))
+- Added an asynchronous function `getApplicationIconAsync` to retrieve the icon of an application by its package name. ([#25468](https://github.com/expo/expo/pull/25468) by [@reichhartd](https://github.com/reichhartd))
+
+### 💡 Others
+
+- [Android] Started using expo modules gradle plugin. ([#34176](https://github.com/expo/expo/pull/34176) by [@lukmccall](https://github.com/lukmccall))
+- [apple] Migrate remaining `expo-module.config.json` to unified platform syntax. ([#34445](https://github.com/expo/expo/pull/34445) by [@reichhartd](https://github.com/reichhartd))
+
+## 12.0.2 - 2025-01-10
+
+_This version does not introduce any user-facing changes._
+
+## 12.0.1 — 2024-10-22
+
+_This version does not introduce any user-facing changes._
+
+## 12.0.0 — 2024-10-22
+
+_This version does not introduce any user-facing changes._
+
+## 11.0.1 — 2024-04-23
+
+_This version does not introduce any user-facing changes._
+
+## 11.0.0 — 2024-04-18
+
+### 🐛 Bug fixes
+
 - On Android, intent number extras are converted to `double`. However, it must be `int`. ([#26164](https://github.com/expo/expo/pull/26164) by [@Alperengozum](https://github.com/Alperengozum))
 
 ### 💡 Others
 
 - drop unused web `name` property. ([#27437](https://github.com/expo/expo/pull/27437) by [@EvanBacon](https://github.com/EvanBacon))
+- Removed deprecated backward compatible Gradle settings. ([#28083](https://github.com/expo/expo/pull/28083) by [@kudo](https://github.com/kudo))
 
 ## 10.11.0 — 2023-11-14
 

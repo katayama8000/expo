@@ -340,6 +340,12 @@ private:
    * Converter used to convert array elements.
    */
   std::shared_ptr<FrontendConverter> parameterConverter;
+
+  jobject convertSingleValue(
+    jsi::Runtime &rt,
+    JNIEnv *env,
+    const jsi::Value &value
+  ) const;
 };
 
 /**
@@ -382,5 +388,22 @@ private:
   BooleanFrontendConverter booleanConverter;
   DoubleFrontendConverter doubleConverter;
   StringFrontendConverter stringConverter;
+};
+
+class NullableFrontendConverter : public FrontendConverter {
+public:
+  NullableFrontendConverter(
+    jni::local_ref<jni::JavaClass<SingleType>::javaobject> expectedType
+  );
+
+  jobject convert(
+    jsi::Runtime &rt,
+    JNIEnv *env,
+    const jsi::Value &value
+  ) const override;
+
+  bool canConvert(jsi::Runtime &rt, const jsi::Value &value) const override;
+private:
+  std::shared_ptr<FrontendConverter> parameterConverter;
 };
 } // namespace expo

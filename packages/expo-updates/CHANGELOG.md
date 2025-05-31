@@ -4,8 +4,411 @@
 
 ### 🛠 Breaking changes
 
+### 🎉 New features
+
+### 🐛 Bug fixes
+
+- Fix update failure reason not populated on iOS. ([#36893](https://github.com/expo/expo/pull/36893) by [@brainbicycle](https://github.com/brainbicycle))
+
+### 💡 Others
+
+- Remove "Please" from warnings and errors ([#36862](https://github.com/expo/expo/pull/36862) by [@brentvatne](https://github.com/brentvatne))
+
+## 0.28.13 — 2025-05-08
+
+### 🐛 Bug fixes
+
+- [Android] Fixed errors when `configuration-cache` is enabled. ([#36678](https://github.com/expo/expo/pull/36678) by [@lukmccall](https://github.com/lukmccall))
+- [iOS] Update the constraints of the deferred root view. ([#36744](https://github.com/expo/expo/pull/36744) by [@alanjhughes](https://github.com/alanjhughes))
+
+## 0.28.12 — 2025-05-01
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.11 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.10 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.9 — 2025-04-28
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.8 — 2025-04-28
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.7 — 2025-04-25
+
+### 🐛 Bug fixes
+
+- Fixed build error from **AppDelegate.swift** integration. ([#36368](https://github.com/expo/expo/pull/36368) by [@kudo](https://github.com/kudo))
+
+## 0.28.6 — 2025-04-22
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.5 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.4 — 2025-04-14
+
+### 🎉 New features
+
+- [Android] Added `EX_UPDATES_COPY_EMBEDDED_ASSETS` flag which is false by default, to not copy embedded assets. ([#36059](https://github.com/expo/expo/pull/36059) by [@kudo](https://github.com/kudo))
+
+## 0.28.3 — 2025-04-11
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.2 — 2025-04-09
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.1 — 2025-04-08
+
+_This version does not introduce any user-facing changes._
+
+## 0.28.0 — 2025-04-04
+
+### 🛠 Breaking changes
+
+- upgrade RN to 0.78 ([#35050](https://github.com/expo/expo/pull/35050) by [@vonovak](https://github.com/vonovak))
+- Remove a few long-deprecated typescript types. ([#34215](https://github.com/expo/expo/pull/34215) by [@wschurman](https://github.com/wschurman))
+
+### 🎉 New features
+
+- Add new state machine context about startup procedure. ([#32433](https://github.com/expo/expo/pull/32433) by [@wschurman](https://github.com/wschurman))
+- Support for updates.useNativeDebug. ([#35468](https://github.com/expo/expo/pull/35468) by [@douglowder](https://github.com/douglowder))
+
+### 🐛 Bug fixes
+
+- [android] Use more robust mechanism for determining empty multipart bodies. ([#33977](https://github.com/expo/expo/pull/33977) by [@wschurman](https://github.com/wschurman))
+- fix E2E tests in Detox debug build ([#32951](https://github.com/expo/expo/pull/32951) by [@matejkriz](https://github.com/matejkriz))
+- Fix runtime version validation warning ([#35188](https://github.com/expo/expo/pull/35188) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+### 💡 Others
+
+- [Android] Made ReactNativeFeatureFlags a parameter to the constructor of the ErrorRecovery class to be able to make tests pass ([#34363](https://github.com/expo/expo/pull/34363) by [@chrfalch](https://github.com/chrfalch))
+- [iOS] Inject logger from controllers down to dependent objects. ([#34035](https://github.com/expo/expo/pull/34035) by [@wschurman](https://github.com/wschurman))
+- [apple] Migrate remaining `expo-module.config.json` to unified platform syntax. ([#34445](https://github.com/expo/expo/pull/34445) by [@reichhartd](https://github.com/reichhartd))
+- Fixed build error on iOS Expo Go. ([#34485](https://github.com/expo/expo/pull/34485) by [@kudo](https://github.com/kudo))
+- Fixed Android unit test errors in BuilDataTest. ([#34510](https://github.com/expo/expo/pull/34510) by [@kudo](https://github.com/kudo))
+- [Android] Started using expo modules gradle plugin. ([#34806](https://github.com/expo/expo/pull/34806) by [@lukmccall](https://github.com/lukmccall))
+- Drop `fs-extra` in favor of `fs`. ([#35036](https://github.com/expo/expo/pull/35036) by [@kitten](https://github.com/kitten))
+- Drop `fast-glob` in favor of `glob`. ([#35082](https://github.com/expo/expo/pull/35082) by [@kitten](https://github.com/kitten))
+- Drop `fbemitter` in favor of custom emitter. ([#35317](https://github.com/expo/expo/pull/35317) by [@kitten](https://github.com/kitten))
+- E2E tests for custom init. ([#35569](https://github.com/expo/expo/pull/35569) by [@douglowder](https://github.com/douglowder))
+- Refactored `RCTReactNativeFactory` integration. ([#35679](https://github.com/expo/expo/pull/35679) by [@kudo](https://github.com/kudo))
+
+## 0.27.4 - 2025-03-18
+
+### 🎉 New features
+
+- Support brownfield apps with EX_UPDATES_CUSTOM_INIT flag. ([#35391](https://github.com/expo/expo/pull/35391) by [@douglowder](https://github.com/douglowder))
+
+## 0.27.3 - 2025-03-11
+
+### 🐛 Bug fixes
+
+- Pass through the package version to config plugin sync utilities ([#35372](https://github.com/expo/expo/pull/35372) by [@brentvatne](https://github.com/brentvatne))
+
+## 0.27.2 - 2025-02-26
+
+### 💡 Others
+
+- Add update id headers to asset requests ([#34453](https://github.com/expo/expo/pull/34453) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+## 0.27.1 - 2025-02-21
+
+### 🎉 New features
+
+- Add `Updates.setUpdateURLAndRequestHeadersOverride()` to allow overriding update URL configuration from the JS API. ([#34422](https://github.com/expo/expo/pull/34422), [#34423](https://github.com/expo/expo/pull/34423), [#34425](https://github.com/expo/expo/pull/34425), [#34426](https://github.com/expo/expo/pull/34426), [#34454](https://github.com/expo/expo/pull/34454), [#34455](https://github.com/expo/expo/pull/34455), [#34428](https://github.com/expo/expo/pull/34428), [#34404](https://github.com/expo/expo/pull/34404) by [@kudo](https://github.com/kudo), [@wschurman](https://github.com/wschurman))
+
+## 0.26.19 - 2025-02-19
+
+### 💡 Others
+
+- Fixed incorrect error log on Android. ([#34785](https://github.com/expo/expo/pull/34785) by [@kudo](https://github.com/kudo))
+
+## 0.26.18 - 2025-02-12
+
+### 🐛 Bug fixes
+
+- [Android] Fix `bytesToHex` `ArrayIndexOutOfBoundsException` during conversion. ([#34855](https://github.com/expo/expo/pull/34855) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+## 0.26.17 - 2025-02-06
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.16 - 2025-02-04
+
+### 🐛 Bug fixes
+
+- Removed Apache Commons IO dependency and fixed crash issue on Android 7. ([#34638](https://github.com/expo/expo/pull/34638) by [@kudo](https://github.com/kudo))
+
+## 0.26.15 - 2025-01-31
+
+### 🐛 Bug fixes
+
+- Fix issue where syncing codesigning config for bare projects would clobber existing Expo.plist config ([#34597](https://github.com/expo/expo/pull/34597) by [@brentvatne](https://github.com/brentvatne))
+
+## 0.26.14 - 2025-01-31
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.13 - 2025-01-19
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.12 - 2025-01-10
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.11 - 2025-01-08
+
+### 🐛 Bug fixes
+
+- Fix an issue where `launchFallbackUpdateFromDisk` is called from a foreground thread leading to ANRs. ([#33693](https://github.com/expo/expo/pull/33693) by [@alanjhughes](https://github.com/alanjhughes))
+
+## 0.26.10 - 2024-12-05
+
+### 🐛 Bug fixes
+
+- Fix black screen appearing instead of the splashscreen on launch. ([#33432](https://github.com/expo/expo/pull/33432) by [@alanjhughes](https://github.com/alanjhughes))
+
+## 0.26.9 — 2024-11-22
+
+### 🐛 Bug fixes
+
+- Fixed `Inconsistent JVM-target compatibility` error when building with JDK 21. ([#33148](https://github.com/expo/expo/pull/33148) by [@kudo](https://github.com/kudo))
+
+### 💡 Others
+
+- Introduced `ReactNativeFeatureFlags` compat to fix React Native 0.77 breaking changes. ([#33077](https://github.com/expo/expo/pull/33077) by [@kudo](https://github.com/kudo))
+
+## 0.26.8 — 2024-11-20
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.7 — 2024-11-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.6 — 2024-11-13
+
+### 💡 Others
+
+- Upgrade `express` to `4.21.1` for `send`. ([#32852](https://github.com/expo/expo/pull/32852) by [@MWein](https://github.com/MWein))
+
+## 0.26.5 — 2024-11-07
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.4 — 2024-11-04
+
+### 🐛 Bug fixes
+
+- Improve web native module interface completeness ([#32512](https://github.com/expo/expo/pull/32512) by [@wschurman](https://github.com/wschurman))
+
+## 0.26.3 — 2024-10-31
+
+_This version does not introduce any user-facing changes._
+
+## 0.26.2 — 2024-10-24
+
+### 🐛 Bug fixes
+
+- Move event emitting responsibility to module. ([#32248](https://github.com/expo/expo/pull/32248) by [@wschurman](https://github.com/wschurman))
+
+### 💡 Others
+
+- Use enum event in OnStartObserving and OnStopObserving. ([#32252](https://github.com/expo/expo/pull/32252) by [@wschurman](https://github.com/wschurman))
+
+## 0.26.1 — 2024-10-22
+
+### 🐛 Bug fixes
+
+- Fixed Android launch crash when R8 is enabled. ([#32226](https://github.com/expo/expo/pull/32226) by [@kudo](https://github.com/kudo))
+
+### 💡 Others
+
+- Fixed updates E2E tests. ([#32226](https://github.com/expo/expo/pull/32226) by [@kudo](https://github.com/kudo))
+
+## 0.26.0 — 2024-10-22
+
+### 🛠 Breaking changes
+
+- Bumped iOS and tvOS deployment target to 15.1. ([#30840](https://github.com/expo/expo/pull/30840) by [@tsapeta](https://github.com/tsapeta))
+
+### 🎉 New features
+
+- Automatically write an `app.json` when attempting to modify a config and no file exists. ([#30026](https://github.com/expo/expo/pull/30026) by [@EvanBacon](https://github.com/EvanBacon))
+- Add launchDuration constant ([#31805](https://github.com/expo/expo/pull/31805) by [@wschurman](https://github.com/wschurman))
+
+### 🐛 Bug fixes
+
+- Fix expo update getting disabled in custom debug configurations. ([#30159](https://github.com/expo/expo/pull/30159) by [@matinzd](https://github.com/matinzd))
+- Fix data race in `AppLauncherWithDatabaseMock.swift`. ([#28924](https://github.com/expo/expo/pull/28924) by [@hakonk](https://github.com/hakonk))
+- Add missing `react` peer dependencies for isolated modules. ([#30488](https://github.com/expo/expo/pull/30488) by [@byCedric](https://github.com/byCedric))
+- Use relative entry point from `@expo/config/paths` with support for server root. ([#30633](https://github.com/expo/expo/pull/30633) by [@byCedric](https://github.com/byCedric))
+- [iOS] Rollback to system SQLite3 and fix incompatible issue when any third-party library uses iOS system SQLite3. ([#30826](https://github.com/expo/expo/pull/30826) by [@kudo](https://github.com/kudo))
+- Use expo-updates as source of truth for runtime version in dev client ([#31453](https://github.com/expo/expo/pull/31453) by [@wschurman](https://github.com/wschurman))
+- Fixed iOS reload crash on New Architecture mode. ([#31789](https://github.com/expo/expo/pull/31789) by [@kudo](https://github.com/kudo))
+- [cli] Disable console during runtime and fingeprint evaluation ([#31874](https://github.com/expo/expo/pull/31874) by [@wschurman](https://github.com/wschurman))
+- Refactor state machine event emitting and initial state ([#31819](https://github.com/expo/expo/pull/31819) by [@wschurman](https://github.com/wschurman))
+- Re-emit state on every observer observe event ([#32103](https://github.com/expo/expo/pull/32103) by [@wschurman](https://github.com/wschurman))
+
+### 💡 Others
+
+- Removed redundant usage of `EventEmitter` instance. ([#28946](https://github.com/expo/expo/pull/28946) by [@tsapeta](https://github.com/tsapeta))
+- [Android] Change from kapt to ksp for room. ([#29055](https://github.com/expo/expo/pull/29055) by [@wschurman](https://github.com/wschurman))
+- [Android] Upgrade dependencies and remove unused ones. Change multipart parser to okhttp. ([#29060](https://github.com/expo/expo/pull/29060) by [@wschurman](https://github.com/wschurman))
+- [Android] Use protected methods in room dao now that ksp allows it. ([#29080](https://github.com/expo/expo/pull/29080) by [@wschurman](https://github.com/wschurman))
+- Bumped Kotlin version to 1.9.24. ([#30199](https://github.com/expo/expo/pull/30199) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+- Move location of assetPatternsToBeBundled config key ([#31584](https://github.com/expo/expo/pull/31584) by [@wschurman](https://github.com/wschurman))
+- Refactor JS event queueing and emitting ([#31818](https://github.com/expo/expo/pull/31818, [#31854](https://github.com/expo/expo/pull/31854) by [@wschurman](https://github.com/wschurman))
+- Remove clearUpdateCacheExperimentalAsync ([#31871](https://github.com/expo/expo/pull/31871) by [@wschurman](https://github.com/wschurman))
+- Refactor errors, context injection, and error logs ([#31929](https://github.com/expo/expo/pull/31929), [#31951](https://github.com/expo/expo/pull/31951), [#31953](https://github.com/expo/expo/pull/31953), [#32009](https://github.com/expo/expo/pull/32009), [#32159](https://github.com/expo/expo/pull/32159) by [@wschurman](https://github.com/wschurman))
+
+### ⚠️ Notices
+
+- Added support for React Native 0.75.x. ([#30034](https://github.com/expo/expo/pull/30034), [#30828](https://github.com/expo/expo/pull/30828) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+## 0.25.25 - 2024-09-20
+
+### 🐛 Bug fixes
+
+- [ios] Store strong references to long-lived objects created in procedures ([#31599](https://github.com/expo/expo/pull/31599) by [@wschurman](https://github.com/wschurman))
+
+## 0.25.24 - 2024-08-23
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.22 - 2024-08-07
+
+### 💡 Others
+
+- Re-exported `@expo/fingerprint` as `expo-updates/fingerprint`. ([#30757](https://github.com/expo/expo/pull/30757) by [@kudo](https://github.com/kudo))
+
+## 0.25.21 - 2024-07-22
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.20 - 2024-07-15
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.19 - 2024-07-11
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.18 - 2024-06-27
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.17 - 2024-06-13
+
+### 💡 Others
+
+- Improved stability of E2E testing. ([#29402](https://github.com/expo/expo/pull/29402) by [@kudo](https://github.com/kudo))
+- Improved JS event performance on Android and stability of E2E testing. ([#29593](https://github.com/expo/expo/pull/29593) by [@kudo](https://github.com/kudo))
+
+## 0.25.16 - 2024-06-06
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.15 — 2024-05-29
+
+### 🐛 Bug fixes
+
+- Fixed launch crash when using fingerprint runtime version policy on Android with expo-dev-client. ([#28912](https://github.com/expo/expo/pull/28912) by [@kudo](https://github.com/kudo))
+
+## 0.25.14 — 2024-05-16
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.13 — 2024-05-15
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.12 — 2024-05-14
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.11 — 2024-05-09
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.10 — 2024-05-09
+
+### 🐛 Bug fixes
+
+- Fixed loading error when both `expo-dev-client` and `expo-updates` installed but no `runtimeVersion` configured. ([#28662](https://github.com/expo/expo/pull/28662) by [@kudo](https://github.com/kudo))
+
+## 0.25.9 — 2024-05-07
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.8 — 2024-05-04
+
+### 💡 Others
+
+- Suppressed `Error: Cannot find module 'expo-dev-client/package.json'` from `pod install` on iOS. ([#28611](https://github.com/expo/expo/pull/28611) by [@kudo](https://github.com/kudo))
+
+## 0.25.7 — 2024-05-02
+
+### 🐛 Bug fixes
+
+- Fixed Gradle Plugin build error when no specified `entryFile` in **android/app/build.gradle**. ([#28546](https://github.com/expo/expo/pull/28546) by [@kudo](https://github.com/kudo))
+
+## 0.25.6 — 2024-05-01
+
+### 🐛 Bug fixes
+
+- Android: Fix hard crash due to missing asset edge row. ([#28264](https://github.com/expo/expo/pull/28264) by [@douglowder](https://github.com/douglowder))
+
+## 0.25.5 — 2024-04-24
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.4 — 2024-04-24
+
+### 🐛 Bug fixes
+
+- Fix CLI VCS detection in CLI and add workflow override ability. ([#28403](https://github.com/expo/expo/pull/28403) by [@wschurman](https://github.com/wschurman))
+
+## 0.25.3 — 2024-04-24
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.2 — 2024-04-23
+
+_This version does not introduce any user-facing changes._
+
+## 0.25.1 — 2024-04-22
+
+### 🎉 New features
+
+- Add --debug option to fingerprint:generate command. ([#28311](https://github.com/expo/expo/pull/28311) by [@wschurman](https://github.com/wschurman))
+
+### 💡 Others
+
+- Bumped the underlying SQLite version to 3.45.3 on iOS. ([#28358](https://github.com/expo/expo/pull/28358) by [@kudo](https://github.com/kudo))
+- Fixed error recovery E2E test on iOS. ([#28372](https://github.com/expo/expo/pull/28372) by [@kudo](https://github.com/kudo))
+
+## 0.25.0 — 2024-04-18
+
+### 🛠 Breaking changes
+
 - Deprecated `UpdatesController.initialize(Context, Map)` and replaced with `UpdatesController.overrideConfiguration()` method to prevent ANR when overriding the `UpdatesConfiguration` on Android. [#26093](https://github.com/expo/expo/pull/26093) by [@kudo](https://github.com/kudo))
 - Remove deprecated APIs: useUpdateEvents(), addListener(), and UpdateEvent type. ([#27882](https://github.com/expo/expo/pull/27882) by [@douglowder](https://github.com/douglowder))
+- Remove the support for configurable `expo.modules.updates.AUTO_SETUP` in **AndroidManifest.xml** and `EXUpdatesAutoSetup` in **Expo.plist**. ([#27996](https://github.com/expo/expo/pull/27996) by [@kudo](https://github.com/kudo))
+- Update fingerprintExperimental -> fingerprint runtime version policy. ([#28220](https://github.com/expo/expo/pull/28220) by [@wschurman](https://github.com/wschurman))
 
 ### 🎉 New features
 
@@ -20,6 +423,7 @@
 - Added React Native New Architecture support. ([#27216](https://github.com/expo/expo/pull/27216) by [@kudo](https://github.com/kudo))
 - Add ability to override build-time fingerprint. ([#27597](https://github.com/expo/expo/pull/27597) by [@wschurman](https://github.com/wschurman))
 - Expose emergency launch reason on constants. ([#27714](https://github.com/expo/expo/pull/27714) by [@wschurman](https://github.com/wschurman))
+- Add header to manifest request containing recently-errored update IDs. ([#27991](https://github.com/expo/expo/pull/27991) by [@wschurman](https://github.com/wschurman))
 
 ### 🐛 Bug fixes
 
@@ -30,6 +434,8 @@
 - Fix inconsistent hashes for autolinking for fingerprint policy. ([#27390](https://github.com/expo/expo/pull/27390) by [@wschurman](https://github.com/wschurman))
 - Fixed launch crash when running on a project without expo-dev-client and debug build. ([#27780](https://github.com/expo/expo/pull/27780) by [@kudo](https://github.com/kudo))
 - Fixed bridgeless error recovery support for launch errors on Android. ([#27815](https://github.com/expo/expo/pull/27815) by [@kudo](https://github.com/kudo))
+- Fixed error recovery on Android. ([#28177](https://github.com/expo/expo/pull/28177) by [@kudo](https://github.com/kudo))
+- Fixed `Updates.reloadAsync()` not working on iOS. ([#28256](https://github.com/expo/expo/pull/28256) by [@kudo](https://github.com/kudo))
 
 ### 💡 Others
 
@@ -47,6 +453,11 @@
 - [iOS] Added bridgeless support on ExpoReactDelegate. ([#27601](https://github.com/expo/expo/pull/27601), [#27689](https://github.com/expo/expo/pull/27689) by [@kudo](https://github.com/kudo))
 - [Android] Added bridgeless support on ReactNativeHostHandler. ([#27629](https://github.com/expo/expo/pull/27629) by [@kudo](https://github.com/kudo))
 - Refactored out `EXReactRootViewFactory.createDefaultReactRootView:` to `RCTAppDelegate.recreateRootViewWithBundleURL:` category. ([#27945](https://github.com/expo/expo/pull/27945) by [@kudo](https://github.com/kudo))
+- Migrated expo-updates-interface to Kotlin. ([#28033](https://github.com/expo/expo/pull/28033) by [@kudo](https://github.com/kudo))
+- Removed deprecated backward compatible Gradle settings. ([#28083](https://github.com/expo/expo/pull/28083) by [@kudo](https://github.com/kudo))
+- Bumped Kotlin version to 1.9.23. ([#28088](https://github.com/expo/expo/pull/28088) by [@kudo](https://github.com/kudo))
+- Always initialize UpdatesController to prevent accidentally accessing the singleton instance. ([#27996](https://github.com/expo/expo/pull/27996) by [@kudo](https://github.com/kudo))
+- Improve error printing in CLI. ([#28188](https://github.com/expo/expo/pull/28188) by [@wschurman](https://github.com/wschurman))
 
 ## 0.24.12 - 2024-03-13
 

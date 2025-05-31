@@ -1,6 +1,8 @@
+/* eslint-env jest */
 import fs from 'fs/promises';
 
-import { execute, getLoadedModulesAsync, projectRoot } from './utils';
+import { getLoadedModulesAsync, projectRoot } from './utils';
+import { executeExpoAsync } from '../utils/expo';
 
 const originalForceColor = process.env.FORCE_COLOR;
 const originalCI = process.env.CI;
@@ -30,7 +32,7 @@ it('loads expected modules by default', async () => {
 });
 
 it('runs `npx expo run --help`', async () => {
-  const results = await execute('run', '--help');
+  const results = await executeExpoAsync(projectRoot, ['run', '--help']);
   expect(results.stdout).toMatchInlineSnapshot(`
     "
       Info
@@ -46,7 +48,7 @@ it('runs `npx expo run --help`', async () => {
 });
 
 it('runs `npx expo run android --help`', async () => {
-  const results = await execute('run', 'android', '--help');
+  const results = await executeExpoAsync(projectRoot, ['run', 'android', '--help']);
   expect(results.stdout).toMatchInlineSnapshot(`
     "› Using expo run:android --help
 
@@ -60,7 +62,9 @@ it('runs `npx expo run android --help`', async () => {
         --no-build-cache       Clear the native build cache
         --no-install           Skip installing dependencies
         --no-bundler           Skip starting the bundler
-        --variant <name>       Build variant. Default: debug
+        --app-id <appId>       Custom Android application ID to launch.
+        --variant <name>       Build variant or product flavor and build variant. Default: debug
+        --binary <path>        Path to existing .apk or .aab to install.
         -d, --device [device]  Device name to run the app on
         -p, --port <port>      Port to start the dev server on. Default: 8081
         -h, --help             Output usage information
@@ -69,7 +73,7 @@ it('runs `npx expo run android --help`', async () => {
 });
 
 it('runs `npx expo run ios --help`', async () => {
-  const results = await execute('run', 'ios', '--help');
+  const results = await executeExpoAsync(projectRoot, ['run', 'ios', '--help']);
   expect(results.stdout).toMatchInlineSnapshot(`
     "› Using expo run:ios --help
 
@@ -84,6 +88,7 @@ it('runs `npx expo run ios --help`', async () => {
         --no-install                     Skip installing dependencies
         --no-bundler                     Skip starting the Metro bundler
         --scheme [scheme]                Scheme to build
+        --binary <path>                  Path to existing .app or .ipa to install.
         --configuration <configuration>  Xcode configuration to use. Debug or Release. Default: Debug
         -d, --device [device]            Device name or UDID to build the app on
         -p, --port <port>                Port to start the Metro bundler on. Default: 8081

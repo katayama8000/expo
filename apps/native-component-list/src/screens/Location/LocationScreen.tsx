@@ -46,14 +46,6 @@ export default function LocationScreen({
   return (
     <ScrollView style={styles.scrollView}>
       <SimpleActionDemo
-        title="requestPermissionsAsync (legacy)"
-        action={() => Location.requestPermissionsAsync()}
-      />
-      <SimpleActionDemo
-        title="getPermissionsAsync (legacy)"
-        action={() => Location.getPermissionsAsync()}
-      />
-      <SimpleActionDemo
         title="requestForegroundPermissionsAsync"
         action={() => Location.requestForegroundPermissionsAsync()}
       />
@@ -93,12 +85,12 @@ export default function LocationScreen({
       />
       <SubscriptionDemo
         title="watchPositionAsync"
-        subscribe={(setValue) => Location.watchPositionAsync({}, setValue)}
+        subscribe={(setValue) => Location.watchPositionAsync({}, setValue, setValue)}
       />
       <SimpleActionDemo title="getHeadingAsync" action={() => Location.getHeadingAsync()} />
       <SubscriptionDemo
         title="watchHeadingAsync"
-        subscribe={(setValue) => Location.watchHeadingAsync(setValue)}
+        subscribe={(setValue) => Location.watchHeadingAsync(setValue, setValue)}
       />
 
       <View style={{ marginTop: 30, paddingHorizontal: 10 }}>

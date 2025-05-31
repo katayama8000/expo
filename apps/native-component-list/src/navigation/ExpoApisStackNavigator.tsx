@@ -1,20 +1,28 @@
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useTheme } from 'ThemeProvider';
 import * as React from 'react';
 
-import getStackConfig from './StackConfig';
 import { optionalRequire } from './routeBuilder';
+import { TabBackground } from '../components/TabBackground';
 import TabIcon from '../components/TabIcon';
+import getStackNavWithConfig from '../navigation/StackConfig';
+import { AudioScreens } from '../screens/Audio/AudioScreen';
+import { CalendarsScreens } from '../screens/CalendarsScreen';
+import { ContactsScreens } from '../screens/Contacts/ContactsScreen';
 import ExpoApis from '../screens/ExpoApisScreen';
+import { ModulesCoreScreens } from '../screens/ModulesCore/ModulesCoreScreen';
+import { type ScreenApiItem, type ScreenConfig } from '../types/ScreenConfig';
 
 const Stack = createStackNavigator();
 
-export const Screens = [
+export const ScreensList: ScreenConfig[] = [
   {
     getComponent() {
-      return optionalRequire(() => require('../screens/ExpoModulesScreen'));
+      return optionalRequire(() => require('../screens/ModulesCore/ModulesCoreScreen'));
     },
-    name: 'ExpoModules',
+    name: 'ModulesCore',
+    options: { title: 'Expo Modules Core' },
   },
   {
     getComponent() {
@@ -74,15 +82,9 @@ export const Screens = [
   },
   {
     getComponent() {
-      return optionalRequire(() => require('../screens/AV/AudioScreen'));
-    },
-    name: 'Audio (expo-av)',
-  },
-  {
-    getComponent() {
       return optionalRequire(() => require('../screens/Audio/AudioScreen'));
     },
-    name: 'Audio (expo-audio)',
+    name: 'Audio',
   },
   {
     getComponent() {
@@ -103,6 +105,13 @@ export const Screens = [
     },
     name: 'BackgroundFetch',
     options: { title: 'Background Fetch' },
+  },
+  {
+    getComponent() {
+      return optionalRequire(() => require('../screens/BackgroundTaskScreen'));
+    },
+    name: 'BackgroundTask',
+    options: { title: 'Background Task' },
   },
   {
     getComponent() {
@@ -133,12 +142,6 @@ export const Screens = [
       return optionalRequire(() => require('../screens/LocalizationScreen'));
     },
     name: 'Localization',
-  },
-  {
-    getComponent() {
-      return optionalRequire(() => require('../screens/FaceDetectorScreen'));
-    },
-    name: 'FaceDetector',
   },
   {
     getComponent() {
@@ -179,27 +182,22 @@ export const Screens = [
   },
   {
     getComponent() {
-      return optionalRequire(() => require('../screens/Contacts/ContactDetailScreen'));
-    },
-    name: 'ContactDetail',
-  },
-  {
-    getComponent() {
       return optionalRequire(() => require('../screens/ErrorScreen'));
     },
     name: 'Errors',
   },
   {
     getComponent() {
-      return optionalRequire(() => require('../screens/EventsScreen'));
-    },
-    name: 'Events',
-  },
-  {
-    getComponent() {
       return optionalRequire(() => require('../screens/ImageManipulatorScreen'));
     },
     name: 'ImageManipulator',
+  },
+  {
+    getComponent() {
+      return optionalRequire(() => require('../screens/ImageManipulatorScreenLegacy'));
+    },
+    name: 'ImageManipulator (legacy)',
+    route: 'image-manipulator-legacy',
   },
   {
     getComponent() {
@@ -314,19 +312,6 @@ export const Screens = [
   },
   {
     getComponent() {
-      return optionalRequire(() => require('../screens/AV/RecordingScreen'));
-    },
-    name: 'Recording',
-    options: { title: 'Audio Recording' },
-  },
-  {
-    getComponent() {
-      return optionalRequire(() => require('../screens/RandomScreen'));
-    },
-    name: 'Random',
-  },
-  {
-    getComponent() {
       return optionalRequire(() => require('../screens/RemindersScreen'));
     },
     name: 'Reminders',
@@ -420,31 +405,54 @@ export const Screens = [
   },
   {
     getComponent() {
+      return optionalRequire(() => require('../screens/VideoThumbnailsScreen'));
+    },
+    name: 'Video Thumbnails',
+  },
+  {
+    getComponent() {
       return optionalRequire(() => require('../screens/ViewShotScreen'));
     },
     name: 'ViewShot',
   },
 ];
 
-function ExpoApisStackNavigator(props: { navigation: BottomTabNavigationProp<any> }) {
-  return (
-    <Stack.Navigator {...props} {...getStackConfig(props)}>
-      <Stack.Screen name="ExpoApis" options={{ title: 'APIs in Expo SDK' }} component={ExpoApis} />
+export const Screens: ScreenConfig[] = [
+  ...ScreensList,
+  ...ModulesCoreScreens,
+  ...AudioScreens,
+  ...ContactsScreens,
+  ...CalendarsScreens,
+];
 
+export const screenApiItems: ScreenApiItem[] = ScreensList.map(({ name, route }) => ({
+  name,
+  route: '/apis/' + (route ?? name.toLowerCase()),
+  isAvailable: true,
+}));
+
+function ExpoApisStackNavigator(props: { navigation: BottomTabNavigationProp<any> }) {
+  const { theme } = useTheme();
+
+  return (
+    <Stack.Navigator {...props} {...getStackNavWithConfig(props.navigation, theme)}>
+      <Stack.Screen name="ExpoApis" options={{ title: 'APIs in Expo SDK' }}>
+        {() => <ExpoApis apis={screenApiItems} />}
+      </Stack.Screen>
       {Screens.map(({ name, options, getComponent }) => (
-        <Stack.Screen name={name} key={name} getComponent={getComponent} options={options || {}} />
+        <Stack.Screen name={name} key={name} getComponent={getComponent} options={options ?? {}} />
       ))}
     </Stack.Navigator>
   );
 }
-const icon = ({ focused }: { focused: boolean }) => {
-  return <TabIcon name="code-tags" focused={focused} />;
-};
+
 ExpoApisStackNavigator.navigationOptions = {
   title: 'APIs',
   tabBarLabel: 'APIs',
-  tabBarIcon: icon,
-  drawerIcon: icon,
+  tabBarIcon: ({ focused }: { focused: boolean }) => {
+    return <TabIcon name="code-tags" focused={focused} />;
+  },
+  tabBarBackground: () => <TabBackground />,
 };
 
 export default ExpoApisStackNavigator;

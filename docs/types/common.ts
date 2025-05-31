@@ -9,6 +9,9 @@ export type PageMetadata = {
   hideFromSearch?: boolean;
   hideTOC?: boolean;
   platforms?: string[];
+  modificationDate?: string;
+  searchRank?: number;
+  searchPosition?: number;
 };
 
 /**
@@ -41,7 +44,11 @@ export type NavigationRoute = {
   expanded?: boolean;
   sidebarTitle?: string;
   weight?: number;
-  children?: NavigationRoute[];
+  isNew?: boolean;
+  isAlpha?: boolean;
+  isDeprecated?: boolean;
+  inExpoGo?: boolean;
+  children?: NavigationRouteWithSection[];
 };
 
 export type NavigationRouteWithSection = NavigationRoute & { section?: string };
@@ -60,3 +67,10 @@ export type PlatformName =
   | 'macos'
   | 'tvos'
   | string;
+
+export type WithTestRequire = {
+  /**
+   * @internal For test usage only.
+   */
+  testRequire?: any;
+};

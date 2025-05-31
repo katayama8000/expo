@@ -1,42 +1,22 @@
-import { DeviceEventEmitter } from 'react-native';
-
-import { EventEmitter, Subscription } from './EventEmitter';
-import NativeModulesProxy from './NativeModulesProxy';
-import { ProxyNativeModule } from './NativeModulesProxy.types';
-import { requireNativeViewManager } from './NativeViewManagerAdapter';
-import Platform from './Platform';
-import { CodedError } from './errors/CodedError';
-import { UnavailabilityError } from './errors/UnavailabilityError';
-
 import './sweet/setUpErrorManager.fx';
-import './web/index';
+import './web';
 
 export type * from './ts-declarations/global';
-export type * from './ts-declarations/SharedObject';
 
+export { default as NativeModule } from './NativeModule';
+export { default as SharedObject } from './SharedObject';
+export { default as SharedRef } from './SharedRef';
+
+export { default as Platform } from './Platform';
 export { default as uuid } from './uuid';
 
-export {
-  DeviceEventEmitter,
-  EventEmitter,
-  NativeModulesProxy,
-  ProxyNativeModule,
-  Platform,
-  Subscription,
-  requireNativeViewManager,
-  // Errors
-  CodedError,
-  UnavailabilityError,
-};
+export { default as EventEmitter, type EventSubscription } from './EventEmitter';
+export type { ProxyNativeModule } from './NativeModulesProxy.types';
+export { requireNativeViewManager } from './NativeViewManagerAdapter';
 
 export * from './requireNativeModule';
-export * from './createWebModule';
+export * from './registerWebModule';
 export * from './TypedArrays.types';
-
-/**
- * @deprecated renamed to `DeviceEventEmitter`
- */
-export const SyntheticPlatformEmitter = DeviceEventEmitter;
 
 export * from './PermissionsInterface';
 export * from './PermissionsHook';
@@ -44,3 +24,12 @@ export * from './PermissionsHook';
 export * from './Refs';
 
 export * from './hooks/useReleasingSharedObject';
+export * from './reload';
+
+// Errors
+export { CodedError } from './errors/CodedError';
+export { UnavailabilityError } from './errors/UnavailabilityError';
+
+// Deprecated
+export { LegacyEventEmitter } from './LegacyEventEmitter';
+export { default as NativeModulesProxy } from './NativeModulesProxy';

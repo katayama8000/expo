@@ -1,7 +1,6 @@
 // Copyright 2018-present 650 Industries. All rights reserved.
 
 import ExpoModulesCore
-import EXUpdatesInterface
 
 /**
  * Manages and controls the auto-setup behavior of expo-updates in applicable environments.
@@ -16,32 +15,6 @@ public final class ExpoUpdatesReactDelegateHandler: ExpoReactDelegateHandler, Ap
   private var deferredRootView: EXDeferredRCTRootView?
   private var rootViewModuleName: String?
   private var rootViewInitialProperties: [AnyHashable: Any]?
-  private lazy var shouldEnableAutoSetup: Bool = {
-    if EXAppDefines.APP_DEBUG && !UpdatesUtils.isNativeDebuggingEnabled() {
-      return false
-    }
-    // if Expo.plist not found or its content is invalid, disable the auto setup
-    guard
-      let configPath = Bundle.main.path(forResource: UpdatesConfig.PlistName, ofType: "plist"),
-      let config = NSDictionary(contentsOfFile: configPath)
-    else {
-      return false
-    }
-
-    // if `EXUpdatesAutoSetup` is false, disable the auto setup
-    let enableAutoSetupValue = config[UpdatesConfig.EXUpdatesConfigEnableAutoSetupKey]
-    if let enableAutoSetup = enableAutoSetupValue as? NSNumber, enableAutoSetup.boolValue == false {
-      return false
-    }
-
-    // Backward compatible if main AppDelegate already has expo-updates setup,
-    // we just skip in this case.
-    if AppController.isInitialized() {
-      return false
-    }
-
-    return true
-  }()
 
   public override func createReactRootView(
     reactDelegate: ExpoReactDelegate,
@@ -49,40 +22,63 @@ public final class ExpoUpdatesReactDelegateHandler: ExpoReactDelegateHandler, Ap
     initialProperties: [AnyHashable: Any]?,
     launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> UIView? {
-    if EXAppDefines.APP_DEBUG && !UpdatesUtils.isNativeDebuggingEnabled() {
-      // In development builds with expo-dev-client, completes the auto-setup for development
-      // builds with the expo-updates integration by passing a reference to DevLauncherController
-      // over to the registry, which expo-dev-client can access.
-      UpdatesControllerRegistry.sharedInstance.controller = AppController.initializeAsDevLauncherWithoutStarting()
+    if UpdatesUtils.isUsingCustomInitialization() {
       return nil
     }
-    if !shouldEnableAutoSetup {
+
+    AppController.initializeWithoutStarting()
+    let controller = AppController.sharedInstance
+    if !controller.isActiveController {
       return nil
     }
 
     self.reactDelegate = reactDelegate
     self.launchOptions = launchOptions
-    AppController.initializeWithoutStarting()
-    let controller = AppController.sharedInstance
     controller.delegate = self
     controller.start()
 
     self.rootViewModuleName = moduleName
     self.rootViewInitialProperties = initialProperties
     self.deferredRootView = EXDeferredRCTRootView()
+    // This view can potentially be displayed for a while.
+    // We should use the splashscreens view here, otherwise a black view appears in the middle of the launch sequence.
+    if let view = createSplashScreenview(), let rootView = self.deferredRootView {
+      view.translatesAutoresizingMaskIntoConstraints = false
+      // The deferredRootView needs to be dark mode aware so we set the color to be the same as the splashscreen background.
+      let backgroundColor = view.backgroundColor ?? UIColor(named: "SplashScreenBackground")
+      rootView.backgroundColor = backgroundColor ?? .white
+      rootView.addSubview(view)
+
+      NSLayoutConstraint.activate([
+        view.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+        view.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+        view.topAnchor.constraint(equalTo: rootView.topAnchor),
+        view.bottomAnchor.constraint(equalTo: rootView.bottomAnchor)
+      ])
+    }
     return self.deferredRootView
+  }
+
+  public override func bundleURL(reactDelegate: ExpoReactDelegate) -> URL? {
+    AppController.sharedInstance.launchAssetUrl()
   }
 
   // MARK: AppControllerDelegate implementations
 
   public func appController(_ appController: AppControllerInterface, didStartWithSuccess success: Bool) {
+    if UpdatesUtils.isUsingCustomInitialization() {
+      return
+    }
     guard let reactDelegate = self.reactDelegate else {
       fatalError("`reactDelegate` should not be nil")
     }
-    guard let rctAppDelegate = (UIApplication.shared.delegate as? RCTAppDelegate) else {
-      fatalError("The `UIApplication.shared.delegate` is not a `RCTAppDelegate` instance.")
+
+    guard let appDelegate = (UIApplication.shared.delegate as? (any ReactNativeFactoryProvider)) ??
+      ((UIApplication.shared.delegate as? NSObject)?.value(forKey: "_expoAppDelegate") as? (any ReactNativeFactoryProvider)) else {
+      fatalError("`UIApplication.shared.delegate` must be an `ExpoAppDelegate` or `EXAppDelegateWrapper`")
     }
-    let rootView = rctAppDelegate.recreateRootView(
+
+    let rootView = appDelegate.recreateRootView(
       withBundleURL: AppController.sharedInstance.launchAssetUrl(),
       moduleName: self.rootViewModuleName,
       initialProps: self.rootViewInitialProperties,
@@ -109,6 +105,25 @@ public final class ExpoUpdatesReactDelegateHandler: ExpoReactDelegateHandler, Ap
     self.deferredRootView = nil
     self.rootViewModuleName = nil
     self.rootViewInitialProperties = nil
+  }
+
+  private func createSplashScreenview() -> UIView? {
+    var view: UIView?
+    let mainBundle = Bundle.main
+    let launchScreen = mainBundle.object(forInfoDictionaryKey: "UILaunchStoryboardName") as? String ?? "LaunchScreen"
+
+    if mainBundle.path(forResource: launchScreen, ofType: "storyboard") != nil ||
+      mainBundle.path(forResource: launchScreen, ofType: "storyboardc") != nil {
+      let launchScreenStoryboard = UIStoryboard(name: launchScreen, bundle: nil)
+      let viewController = launchScreenStoryboard.instantiateInitialViewController()
+      view = viewController?.view
+      viewController?.view = nil
+    } else if mainBundle.path(forResource: launchScreen, ofType: "nib") != nil {
+      let views = mainBundle.loadNibNamed(launchScreen, owner: self)
+      view = views?.first as? UIView
+    }
+
+    return view
   }
 
   private func getWindow() -> UIWindow {

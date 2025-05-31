@@ -267,6 +267,12 @@ public class Manifest: NSObject {
     }
   }
 
+  public func iosAppIconUrl() -> String? {
+    return expoClientConfigRootObject().let { it in
+      Manifest.string(fromManifest: it, atPath: ["iconUrl"])
+    }
+  }
+
   public func iosSplashImageUrl() -> String? {
     return expoClientConfigRootObject().let { it in
       Manifest.string(fromManifest: it, atPaths: [
@@ -299,6 +305,16 @@ public class Manifest: NSObject {
     }
 
     return supportsRTL
+  }
+
+  public func forcesRTL() -> Bool {
+    guard let expoClientConfigRootObject = expoClientConfigRootObject(),
+      let extra: [String: Any]? = expoClientConfigRootObject.optionalValue(forKey: "extra"),
+      let forcesRTL: Bool = extra?.optionalValue(forKey: "forcesRTL") else {
+      return false
+    }
+
+    return forcesRTL
   }
 
   public func jsEngine() -> String {

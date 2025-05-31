@@ -8,6 +8,18 @@ import HeadingText from '../components/HeadingText';
 import ListButton from '../components/ListButton';
 import MonoText from '../components/MonoText';
 import Colors from '../constants/Colors';
+import { optionalRequire } from '../navigation/routeBuilder';
+
+export const CalendarsScreens = [
+  {
+    name: 'Events',
+    route: 'events',
+    options: {},
+    getComponent() {
+      return optionalRequire(() => require('./EventsScreen'));
+    },
+  },
+];
 
 type StackNavigation = StackNavigationProp<{
   Reminders: { calendar: any };
@@ -53,7 +65,8 @@ export default function CalendarsScreen({ navigation }: { navigation: StackNavig
 
   const findCalendars = async () => {
     const calendarGranted = (await askForCalendarPermissions()).granted;
-    const reminderGranted = (await askForReminderPermissions()).granted;
+    const reminderGranted =
+      Platform.OS === 'ios' ? (await askForReminderPermissions()).granted : true;
     if (calendarGranted && reminderGranted) {
       const eventCalendars = (await Calendar.getCalendarsAsync('event')) as unknown as any[];
       const reminderCalendars = (

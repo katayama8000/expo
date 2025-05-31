@@ -2,46 +2,46 @@
 package versioned.host.exp.exponent
 
 import android.content.Context
-import android.os.Looper
 import com.airbnb.android.react.lottie.LottiePackage
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
-import com.reactnativecommunity.slider.ReactSliderPackage
 import com.horcrux.svg.SvgPackage
+import com.reactcommunity.rndatetimepicker.RNDateTimePickerPackage
+import com.reactnativecommunity.netinfo.NetInfoModule
 import com.reactnativecommunity.picker.RNCPickerPackage
+import com.reactnativecommunity.slider.ReactSliderPackage
+import com.reactnativecommunity.webview.RNCWebViewModule
+import com.reactnativecommunity.webview.RNCWebViewPackage
 import com.reactnativepagerview.PagerViewPackage
+import com.reactnativestripesdk.StripeSdkPackage
+import com.rnmaps.maps.MapsPackage
 import com.shopify.reactnative.flash_list.ReactNativeFlashListPackage
 import com.shopify.reactnative.skia.RNSkiaPackage
-import com.swmansion.rnscreens.RNScreensPackage
 import com.swmansion.gesturehandler.RNGestureHandlerPackage
 import com.swmansion.gesturehandler.react.RNGestureHandlerModule
+import com.swmansion.rnscreens.RNScreensPackage
+import com.th3rdwave.safeareacontext.SafeAreaContextPackage
+import com.zoontek.rnedgetoedge.EdgeToEdgeModule
 import expo.modules.adapters.react.ReactModuleRegistryProvider
 import expo.modules.core.interfaces.Package
 import expo.modules.core.interfaces.SingletonModule
 import expo.modules.kotlin.ModulesProvider
 import expo.modules.manifests.core.Manifest
+import fr.greweb.reactnativeviewshot.RNViewShotModule
 import host.exp.exponent.analytics.EXL
 import host.exp.exponent.kernel.ExperienceKey
-// WHEN_VERSIONING_REMOVE_FROM_HERE
 import host.exp.exponent.kernel.ExponentKernelModuleProvider
-// WHEN_VERSIONING_REMOVE_TO_HERE
 import host.exp.exponent.kernel.KernelConstants
 import host.exp.exponent.utils.ScopedContext
 import org.json.JSONException
-import versioned.host.exp.exponent.modules.api.*
-import versioned.host.exp.exponent.modules.api.cognito.RNAWSCognitoModule
-import versioned.host.exp.exponent.modules.api.components.datetimepicker.RNDateTimePickerPackage
-import versioned.host.exp.exponent.modules.api.components.maps.MapsPackage
-import versioned.host.exp.exponent.modules.api.components.maskedview.RNCMaskedViewPackage
-import versioned.host.exp.exponent.modules.api.components.reactnativestripesdk.StripeSdkPackage
-import versioned.host.exp.exponent.modules.api.components.webview.RNCWebViewModule
-import versioned.host.exp.exponent.modules.api.components.webview.RNCWebViewPackage
-import versioned.host.exp.exponent.modules.api.netinfo.NetInfoModule
+import org.reactnative.maskedview.RNCMaskedViewPackage
+import versioned.host.exp.exponent.modules.api.KeyboardModule
+import versioned.host.exp.exponent.modules.api.PedometerModule
+import versioned.host.exp.exponent.modules.api.ScreenOrientationModule
+import versioned.host.exp.exponent.modules.api.URLHandlerModule
 import versioned.host.exp.exponent.modules.api.notifications.NotificationsModule
-import versioned.host.exp.exponent.modules.api.safeareacontext.SafeAreaContextPackage
-import versioned.host.exp.exponent.modules.api.viewshot.RNViewShotModule
 import versioned.host.exp.exponent.modules.internal.DevMenuModule
 import versioned.host.exp.exponent.modules.internal.ExponentAsyncStorageModule
 import versioned.host.exp.exponent.modules.internal.ExponentUnsignedAsyncStorageModule
@@ -102,10 +102,9 @@ class ExponentPackage : ReactPackage {
   }
 
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    val isVerified = manifest.isVerified() ?: false
+    val isVerified = manifest.isVerified()
     val nativeModules: MutableList<NativeModule> = mutableListOf(
       URLHandlerModule(reactContext),
-      ShakeModule(reactContext),
       KeyboardModule(reactContext)
     )
     nativeModules.add(if (isVerified) ExponentAsyncStorageModule(reactContext, manifest) else ExponentUnsignedAsyncStorageModule(reactContext))
@@ -125,18 +124,18 @@ class ExponentPackage : ReactPackage {
         val experienceKey = ExperienceKey.fromManifest(manifest)
         val scopedContext = ScopedContext(reactContext, experienceKey)
         nativeModules.add(NotificationsModule(reactContext, experienceKey, manifest.getStableLegacyID(), manifest.getEASProjectID()))
-        nativeModules.add(RNViewShotModule(reactContext, scopedContext))
+        nativeModules.add(RNViewShotModule(reactContext, scopedContext.cacheDir, scopedContext.externalCacheDir))
         nativeModules.add(ExponentTestNativeModule(reactContext))
         nativeModules.add(PedometerModule(reactContext))
         nativeModules.add(ScreenOrientationModule(reactContext))
         nativeModules.add(RNGestureHandlerModule(reactContext))
-        nativeModules.add(RNAWSCognitoModule(reactContext))
         nativeModules.add(RNCWebViewModule(reactContext))
         nativeModules.add(NetInfoModule(reactContext))
-        nativeModules.addAll(SvgPackage().getNativeModuleIterator(reactContext).map { it.module })
+        nativeModules.add(EdgeToEdgeModule(reactContext))
+        nativeModules.addAll(SvgPackage().getReactModuleInfoProvider().getReactModuleInfos().map { SvgPackage().getModule(it.value.name, reactContext)!! })
         nativeModules.addAll(MapsPackage().createNativeModules(reactContext))
-        nativeModules.addAll(RNDateTimePickerPackage().getNativeModuleIterator(reactContext).map { it.module })
-        nativeModules.addAll(stripePackage.createNativeModules(reactContext))
+        nativeModules.addAll(RNDateTimePickerPackage().getReactModuleInfoProvider().getReactModuleInfos().map { RNDateTimePickerPackage().getModule(it.value.name, reactContext)!! })
+        nativeModules.addAll(stripePackage.getReactModuleInfoProvider().getReactModuleInfos().map { stripePackage.getModule(it.value.name, reactContext)!! })
         nativeModules.addAll(skiaPackage.createNativeModules(reactContext))
 
         // Call to create native modules has to be at the bottom --
@@ -174,12 +173,12 @@ class ExponentPackage : ReactPackage {
         RNGestureHandlerPackage(),
         RNScreensPackage(),
         RNCWebViewPackage(),
-        SafeAreaContextPackage(),
         RNDateTimePickerPackage(),
         RNCMaskedViewPackage(),
         RNCPickerPackage(),
         ReactSliderPackage(),
         PagerViewPackage(),
+        SafeAreaContextPackage(),
         stripePackage,
         skiaPackage,
         ReactNativeFlashListPackage()
@@ -248,10 +247,6 @@ class ExponentPackage : ReactPackage {
       manifest: Manifest?,
       providedExpoPackages: List<Package>?
     ): List<SingletonModule> {
-      if (Looper.getMainLooper() != Looper.myLooper()) {
-        throw RuntimeException("Singleton modules must be created on the main thread.")
-      }
-
       val expoPackages = providedExpoPackages ?: ExperiencePackagePicker.packages(manifest)
 
       for (expoPackage in expoPackages) {

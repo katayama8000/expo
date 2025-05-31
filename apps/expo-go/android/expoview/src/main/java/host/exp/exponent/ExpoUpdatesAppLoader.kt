@@ -18,6 +18,7 @@ import expo.modules.manifests.core.Manifest
 import expo.modules.updates.codesigning.CODE_SIGNING_METADATA_ALGORITHM_KEY
 import expo.modules.updates.codesigning.CODE_SIGNING_METADATA_KEY_ID_KEY
 import expo.modules.updates.codesigning.CodeSigningAlgorithm
+import expo.modules.updates.logging.UpdatesLogger
 import expo.modules.updates.selectionpolicy.LoaderSelectionPolicyFilterAware
 import expo.modules.updates.selectionpolicy.ReaperSelectionPolicyDevelopmentClient
 import expo.modules.updates.selectionpolicy.SelectionPolicy
@@ -28,12 +29,17 @@ import host.exp.exponent.kernel.ExpoViewKernel
 import host.exp.exponent.kernel.Kernel
 import host.exp.exponent.kernel.KernelConfig
 import host.exp.exponent.storage.ExponentSharedPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.util.*
 import javax.inject.Inject
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 
 private const val UPDATE_AVAILABLE_EVENT = "updateAvailable"
 private const val UPDATE_NO_UPDATE_AVAILABLE_EVENT = "noUpdateAvailable"
@@ -53,7 +59,8 @@ private const val UPDATE_ERROR_EVENT = "error"
 class ExpoUpdatesAppLoader @JvmOverloads constructor(
   private val manifestUrl: String,
   private val callback: AppLoaderCallback,
-  private val useCacheOnly: Boolean = false
+  private val useCacheOnly: Boolean = false,
+  private val loaderScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
   @Inject
   lateinit var exponentSharedPreferences: ExponentSharedPreferences
@@ -72,17 +79,31 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
   var isUpToDate = true
     private set
   var status: AppLoaderStatus? = null
-    private set
+    private set(value) {
+      field = value
+      callback.updateStatus(value)
+    }
+
   var shouldShowAppLoaderStatus = true
     private set
   private var isStarted = false
+  private var startupStartTimeMillis: Long? = null
+  private var startupEndTimeMillis: Long? = null
+  val launchDuration
+    get() = startupStartTimeMillis?.let { start ->
+      startupEndTimeMillis?.let { end ->
+        (end - start).toDuration(
+          DurationUnit.MILLISECONDS
+        )
+      }
+    }
 
   interface AppLoaderCallback {
     fun onOptimisticManifest(optimisticManifest: Manifest)
     fun onManifestCompleted(manifest: Manifest)
     fun onBundleCompleted(localBundlePath: String)
     fun emitEvent(params: JSONObject)
-    fun updateStatus(status: AppLoaderStatus)
+    fun updateStatus(status: AppLoaderStatus?)
     fun onError(e: Exception)
   }
 
@@ -92,14 +113,10 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
   lateinit var launcher: Launcher
     private set
 
-  private fun updateStatus(status: AppLoaderStatus) {
-    this.status = status
-    callback.updateStatus(status)
-  }
-
   fun start(context: Context) {
     check(!isStarted) { "AppLoader for $manifestUrl was started twice. AppLoader.start() may only be called once per instance." }
     isStarted = true
+    startupStartTimeMillis = System.currentTimeMillis()
     status = AppLoaderStatus.CHECKING_FOR_UPDATE
     kernel.addAppLoaderForManifestUrl(manifestUrl, this)
 
@@ -118,7 +135,7 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
         this[UpdatesConfiguration.UPDATES_CONFIGURATION_LAUNCH_WAIT_MS_KEY] = 60000
       }
       this[UpdatesConfiguration.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY] = requestHeaders
-      this[UpdatesConfiguration.UPDATES_CONFIGURATION_RUNTIME_VERSION_KEY] = "exposdk:${Constants.TEMPORARY_SDK_VERSION}"
+      this[UpdatesConfiguration.UPDATES_CONFIGURATION_RUNTIME_VERSION_KEY] = "exposdk:${Constants.SDK_VERSION}"
       // in Expo Go, embed the Expo Root Certificate and get the Expo Go intermediate certificate and development certificates from the multipart manifest response part
       this[UpdatesConfiguration.UPDATES_CONFIGURATION_CODE_SIGNING_CERTIFICATE] = context.assets.open("expo-root.pem").readBytes().decodeToString()
       this[UpdatesConfiguration.UPDATES_CONFIGURATION_CODE_SIGNING_METADATA] = mapOf(
@@ -132,7 +149,7 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
     }.toMap()
 
     val configuration = UpdatesConfiguration(null, configMap)
-    val sdkVersionsList = (Constants.SDK_VERSIONS_LIST + listOf(RNObject.UNVERSIONED)).flatMap {
+    val sdkVersionsList = listOf(Constants.SDK_VERSION, RNObject.UNVERSIONED).flatMap {
       listOf(it, "exposdk:$it")
     }
     val selectionPolicy = SelectionPolicy(
@@ -146,30 +163,37 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
       callback.onError(e)
       return
     }
-    val fileDownloader = FileDownloader(context, configuration)
-    startLoaderTask(configuration, fileDownloader, directory, selectionPolicy, context)
+    val logger = UpdatesLogger(context.filesDir)
+    val fileDownloader = FileDownloader(context, configuration, logger)
+    loaderScope.launch {
+      startLoaderTask(configuration, fileDownloader, directory, selectionPolicy, context, logger)
+    }
   }
 
-  private fun startLoaderTask(
+  private suspend fun startLoaderTask(
     configuration: UpdatesConfiguration,
     fileDownloader: FileDownloader,
     directory: File,
     selectionPolicy: SelectionPolicy,
-    context: Context
+    context: Context,
+    logger: UpdatesLogger
   ) {
     updatesConfiguration = configuration
     LoaderTask(
+      context,
       configuration,
       databaseHolder,
       directory,
       fileDownloader,
       selectionPolicy,
+      logger,
       object : LoaderTaskCallback {
         private var didAbort = false
         override fun onFailure(e: Exception) {
           if (didAbort) {
             return
           }
+          this@ExpoUpdatesAppLoader.startupEndTimeMillis = System.currentTimeMillis()
           var exception = e
           try {
             val errorJson = JSONObject(e.message!!)
@@ -216,13 +240,14 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
           }
           setShouldShowAppLoaderStatus(update.manifest)
           callback.onOptimisticManifest(update.manifest)
-          updateStatus(AppLoaderStatus.DOWNLOADING_NEW_UPDATE)
+          status = AppLoaderStatus.DOWNLOADING_NEW_UPDATE
         }
 
         override fun onSuccess(launcher: Launcher, isUpToDate: Boolean) {
           if (didAbort) {
             return
           }
+          this@ExpoUpdatesAppLoader.startupEndTimeMillis = System.currentTimeMillis()
           this@ExpoUpdatesAppLoader.launcher = launcher
           this@ExpoUpdatesAppLoader.isUpToDate = isUpToDate
           try {
@@ -274,7 +299,7 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
           }
         }
       }
-    ).start(context)
+    ).start()
   }
 
   private fun setShouldShowAppLoaderStatus(manifest: Manifest) {
@@ -307,7 +332,7 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
       if (KernelConfig.FORCE_UNVERSIONED_PUBLISHED_EXPERIENCES) {
         headers["Exponent-SDK-Version"] = "UNVERSIONED"
       } else {
-        headers["Exponent-SDK-Version"] = Constants.SDK_VERSIONS
+        headers["Exponent-SDK-Version"] = Constants.SDK_VERSION
       }
       return headers
     }
@@ -326,10 +351,8 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
     if (RNObject.UNVERSIONED == sdkVersion) {
       return true
     }
-    for (version in Constants.SDK_VERSIONS_LIST) {
-      if (version == sdkVersion) {
-        return true
-      }
+    if (Constants.SDK_VERSION == sdkVersion) {
+      return true
     }
     return false
   }
@@ -340,7 +363,7 @@ class ExpoUpdatesAppLoader @JvmOverloads constructor(
       errorJson.put("message", "Invalid SDK version")
       if (sdkVersion == null) {
         errorJson.put("errorCode", "NO_SDK_VERSION_SPECIFIED")
-      } else if (ABIVersion.toNumber(sdkVersion) > ABIVersion.toNumber(Constants.SDK_VERSIONS_LIST[0])) {
+      } else if (ABIVersion.toNumber(sdkVersion) > ABIVersion.toNumber(Constants.SDK_VERSION)) {
         errorJson.put("errorCode", "EXPERIENCE_SDK_VERSION_TOO_NEW")
       } else {
         errorJson.put("errorCode", "EXPERIENCE_SDK_VERSION_OUTDATED")

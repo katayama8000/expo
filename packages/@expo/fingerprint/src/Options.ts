@@ -1,8 +1,13 @@
 import fs from 'fs/promises';
+import type { Minimatch } from 'minimatch';
 import os from 'os';
 import path from 'path';
 
-import type { NormalizedOptions, Options } from './Fingerprint.types';
+import { loadConfigAsync } from './Config';
+import { satisfyExpoVersion } from './ExpoResolver';
+import type { Config, NormalizedOptions, Options } from './Fingerprint.types';
+import { SourceSkips } from './sourcer/SourceSkips';
+import { buildDirMatchObjects, buildPathMatchObjects } from './utils/Path';
 
 export const FINGERPRINT_IGNORE_FILENAME = '.fingerprintignore';
 
@@ -33,6 +38,8 @@ export const DEFAULT_IGNORE_PATHS = [
   // iOS
   '**/ios/Pods/**/*',
   '**/ios/build/**/*',
+  '**/ios/.xcode.env.local',
+  '**/ios/**/project.xcworkspace',
   '**/ios/*.xcworkspace/xcuserdata/**/*',
 
   // System files that differ from machine to machine
@@ -44,50 +51,51 @@ export const DEFAULT_IGNORE_PATHS = [
   'app.config.json',
   'app.json',
 
-  // Ignore default javascript files when calling `getConfig()`
-  '**/node_modules/@babel/**/*',
-  '**/node_modules/@expo/**/*',
-  '**/node_modules/@jridgewell/**/*',
-  '**/node_modules/expo/config.js',
-  '**/node_modules/expo/config-plugins.js',
-  `**/node_modules/{${[
-    'chalk',
-    'debug',
-    'escape-string-regexp',
-    'getenv',
-    'graceful-fs',
-    'has-flag',
-    'imurmurhash',
-    'js-tokens',
-    'json5',
-    'picocolors',
-    'lines-and-columns',
-    'require-from-string',
-    'resolve-from',
-    'signal-exit',
-    'sucrase',
-    'supports-color',
-    'ts-interface-checker',
-    'write-file-atomic',
-  ].join(',')}}/**/*`,
+  // Ignore nested node_modules
+  '**/node_modules/**/node_modules/**',
 ];
+
+export const DEFAULT_SOURCE_SKIPS = SourceSkips.PackageJsonAndroidAndIosScriptsIfNotContainRun;
 
 export async function normalizeOptionsAsync(
   projectRoot: string,
   options?: Options
 ): Promise<NormalizedOptions> {
+  const config = await loadConfigAsync(projectRoot, options?.silent ?? false);
+  const ignorePathMatchObjects = await collectIgnorePathsAsync(
+    projectRoot,
+    config?.ignorePaths,
+    options
+  );
   return {
-    ...options,
-    platforms: options?.platforms ?? ['android', 'ios'],
-    concurrentIoLimit: options?.concurrentIoLimit ?? os.cpus().length,
-    hashAlgorithm: options?.hashAlgorithm ?? 'sha1',
-    ignorePaths: await collectIgnorePathsAsync(projectRoot, options),
+    // Defaults
+    platforms: ['android', 'ios'],
+    concurrentIoLimit: os.cpus().length,
+    hashAlgorithm: 'sha1',
+    sourceSkips: DEFAULT_SOURCE_SKIPS,
+    // Options from config
+    ...config,
+    // Explicit options
+    ...Object.fromEntries(Object.entries(options ?? {}).filter(([_, v]) => v != null)),
+    // These options are computed by both default and explicit options, so we put them last.
+    enableReactImportsPatcher:
+      options?.enableReactImportsPatcher ??
+      config?.enableReactImportsPatcher ??
+      satisfyExpoVersion(projectRoot, '<52.0.0') ??
+      false,
+    ignorePathMatchObjects,
+    ignoreDirMatchObjects: buildDirMatchObjects(ignorePathMatchObjects),
   };
 }
 
-async function collectIgnorePathsAsync(projectRoot: string, options?: Options): Promise<string[]> {
+async function collectIgnorePathsAsync(
+  projectRoot: string,
+  pathsFromConfig: Config['ignorePaths'],
+  options: Options | undefined
+): Promise<Minimatch[]> {
   const ignorePaths = [
     ...DEFAULT_IGNORE_PATHS,
+    ...(pathsFromConfig ?? []),
     ...(options?.ignorePaths ?? []),
     ...(options?.dirExcludes?.map((dirExclude) => `${dirExclude}/**/*`) ?? []),
   ];
@@ -104,5 +112,5 @@ async function collectIgnorePathsAsync(projectRoot: string, options?: Options): 
     }
   } catch {}
 
-  return ignorePaths;
+  return buildPathMatchObjects(ignorePaths);
 }

@@ -122,8 +122,8 @@ final class EventEmitterSpec: ExpoSpec {
       it("calls startObserving on addListener") {
         var calls: Int = 0
         let eventName = "testEvent"
-        let listenerA = runtime.createSyncFunction("listenerA") { _, _ in }
-        let listenerB = runtime.createSyncFunction("listenerB") { _, _ in }
+        let listenerA = runtime.createSyncFunction("listenerA") { _, _ in .undefined }
+        let listenerB = runtime.createSyncFunction("listenerB") { _, _ in .undefined }
         let observer = try setupEventObserver(runtime: runtime, functionName: "startObserving") { arguments in
           expect(try arguments.first?.asString()) == eventName
           calls = calls + 1
@@ -138,7 +138,7 @@ final class EventEmitterSpec: ExpoSpec {
       it("calls stopObserving on removeListener") {
         var calls: Int = 0
         let eventName = "testEvent"
-        let listener = runtime.createSyncFunction("listener") { _, _ in }
+        let listener = runtime.createSyncFunction("listener") { _, _ in .undefined }
         let observer = try setupEventObserver(runtime: runtime, functionName: "stopObserving") { arguments in
           expect(try arguments.first?.asString()) == eventName
           calls = calls + 1
@@ -154,7 +154,7 @@ final class EventEmitterSpec: ExpoSpec {
       it("calls stopObserving on removeAllListeners") {
         var calls: Int = 0
         let eventName = "testEvent"
-        let listener = runtime.createSyncFunction("listener") { _, _ in }
+        let listener = runtime.createSyncFunction("listener") { _, _ in .undefined }
         let observer = try setupEventObserver(runtime: runtime, functionName: "stopObserving") { arguments in
           expect(try arguments.first?.asString()) == eventName
           calls = calls + 1
@@ -212,6 +212,35 @@ final class EventEmitterSpec: ExpoSpec {
         ])
         expect(try emittersAreEqual.asBool()) == true
       }
+
+      it("calls all listeners even if removed by a listener") {
+        // The third listener should be called even though it was already removed by the second listener.
+        let result = try runtime.eval([
+          "emitter = new expo.EventEmitter()",
+          "result = 0",
+          "listener = () => emitter.removeAllListeners('test')",
+          "emitter.addListener('test', () => result |= 1)",
+          "emitter.addListener('test', listener)",
+          "emitter.addListener('test', () => result |= 2)",
+          "emitter.emit('test')",
+          "result"
+        ])
+        expect(try result.asInt()) == 3
+      }
+
+      it("calls only existing listeners even if a listener adds more") {
+        // The listener added in the second listener shouldn't be called.
+        let result = try runtime.eval([
+          "emitter = new expo.EventEmitter()",
+          "result = 0",
+          "emitter.addListener('test', () => result |= 1)",
+          "emitter.addListener('test', () => emitter.addListener('test', () => result |= 2))",
+          "emitter.addListener('test', () => result |= 4)",
+          "emitter.emit('test')",
+          "result"
+        ])
+        expect(try result.asInt()) == 5
+      }
     }
   }
 }
@@ -231,7 +260,7 @@ private func setupEventObserver(
   let emitter = try! runtime.eval("new expo.EventEmitter()").asObject()
   let observingFunction = runtime.createSyncFunction(functionName) { [callback] this, arguments in
     try callback(arguments)
-    return Optional<Any>.none as Any
+    return .undefined
   }
 
   emitter.setProperty(functionName, value: observingFunction)

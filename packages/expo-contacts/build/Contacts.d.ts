@@ -1,5 +1,14 @@
-import { PermissionResponse, PermissionStatus } from 'expo-modules-core';
+import { PermissionResponse, PermissionStatus, PermissionExpiration } from 'expo-modules-core';
 import { type ShareOptions } from 'react-native';
+export type ContactsPermissionResponse = PermissionResponse & {
+    /**
+     * Indicates if your app has access to the whole or only part of the contact library. Possible values are:
+     * - `'all'` if the user granted your app access to the whole contact library
+     * - `'limited'` if the user granted your app access only to selected contacts (only available on iOS 18+)
+     * - `'none'`
+     */
+    accessPrivileges?: 'all' | 'limited' | 'none';
+};
 export type CalendarFormatType = CalendarFormats | `${CalendarFormats}`;
 export type ContainerType = ContainerTypes | `${ContainerTypes}`;
 export type ContactType = ContactTypes | `${ContactTypes}`;
@@ -8,11 +17,11 @@ export type Date = {
     /**
      * Day.
      */
-    day?: number;
+    day: number;
     /**
      * Month - adjusted for JavaScript `Date` which starts at `0`.
      */
-    month?: number;
+    month: number;
     /**
      * Year.
      */
@@ -24,9 +33,9 @@ export type Date = {
     /**
      * Localized display name.
      */
-    label: string;
+    label?: string;
     /**
-     * Format for the input date.
+     * Format for the date. This is provided by the OS, do not set this manually.
      */
     format?: CalendarFormatType;
 };
@@ -261,11 +270,11 @@ export type Contact = {
      */
     maidenName?: string;
     /**
-     * Dr. Mr. Mrs. ect…
+     * Dr., Mr., Mrs., and so on.
      */
     namePrefix?: string;
     /**
-     * Jr. Sr. ect…
+     * Jr., Sr., and so on.
      */
     nameSuffix?: string;
     /**
@@ -357,6 +366,11 @@ export type Contact = {
      * @platform ios
      */
     socialProfiles?: SocialProfile[];
+    /**
+     * Whether the contact is starred.
+     * @platform android
+     */
+    isFavorite?: boolean;
 };
 /**
  * The return value for queried contact operations like `getContactsAsync`.
@@ -524,7 +538,7 @@ export type Container = {
     id: string;
     type: ContainerType;
 };
-export { PermissionStatus, PermissionResponse };
+export { PermissionStatus, PermissionResponse, PermissionExpiration };
 /**
  * Returns whether the Contacts API is enabled on the current device. This method does not check the app permissions.
  * @returns A promise that fulfills with a `boolean`, indicating whether the Contacts API is available on the current device. It always resolves to `false` on web.
@@ -583,8 +597,7 @@ export declare function getContactByIdAsync(id: string, fields?: FieldType[]): P
 export declare function addContactAsync(contact: Contact, containerId?: string): Promise<string>;
 /**
  * Mutate the information of an existing contact. Due to an iOS bug, `nonGregorianBirthday` field cannot be modified.
- * > **info** On Android, you can use [`presentFormAsync`](#contactspresentformasynccontactid-contact-formoptions) to make edits to contacts.
- * @param contact A contact object including the wanted changes.
+ * @param contact A contact object including the wanted changes. Contact `id` is required.
  * @return A promise that fulfills with ID of the updated system contact if mutation was successful.
  * @example
  * ```js
@@ -595,9 +608,10 @@ export declare function addContactAsync(contact: Contact, containerId?: string):
  * };
  * await Contacts.updateContactAsync(contact);
  * ```
- * @platform ios
  */
-export declare function updateContactAsync(contact: Contact): Promise<string>;
+export declare function updateContactAsync(contact: {
+    id: string;
+} & Partial<Omit<Contact, 'id'>>): Promise<string>;
 /**
  * Delete a contact from the system.
  * @param contactId ID of the contact you want to delete.
@@ -721,7 +735,7 @@ export declare function removeContactFromGroupAsync(contactId: string, groupId: 
 export declare function getGroupsAsync(groupQuery: GroupQuery): Promise<Group[]>;
 /**
  * Presents a native contact picker to select a single contact from the system. On Android, the `READ_CONTACTS` permission is required. You can
- * obtain this permission by calling the [Contacts.requestPermissionsAsync()](#contactsrequestpermissionsasync) method. On iOS, no permissions are
+ * obtain this permission by calling the [`Contacts.requestPermissionsAsync()`](#contactsrequestpermissionsasync) method. On iOS, no permissions are
  * required to use this method.
  * @return A promise that fulfills with a single `Contact` object if a contact is selected or `null` if no contact is selected (when selection is canceled).
  */
@@ -751,14 +765,22 @@ export declare function getDefaultContainerIdAsync(): Promise<string>;
 export declare function getContainersAsync(containerQuery: ContainerQuery): Promise<Container[]>;
 /**
  * Checks user's permissions for accessing contacts data.
- * @return A promise that resolves to a [PermissionResponse](#permissionresponse) object.
+ * @return A promise that resolves to a [ContactsPermissionResponse](#contactspermissionresponse) object.
  */
-export declare function getPermissionsAsync(): Promise<PermissionResponse>;
+export declare function getPermissionsAsync(): Promise<ContactsPermissionResponse>;
 /**
  * Asks the user to grant permissions for accessing contacts data.
- * @return A promise that resolves to a [PermissionResponse](#permissionresponse) object.
+ * @return A promise that resolves to a [ContactsPermissionResponse](#contactspermissionresponse) object.
  */
-export declare function requestPermissionsAsync(): Promise<PermissionResponse>;
+export declare function requestPermissionsAsync(): Promise<ContactsPermissionResponse>;
+/**
+ * Presents a modal which allows the user to select which contacts the app has access to.
+ * Using this function is reasonable only when the app has "limited" permissions.
+ * @return A promise that resolves with an array of contact identifiers that were newly granted to the app.
+ * Contacts which the app lost access to are not listed. On platforms other than iOS and below 18.0, the promise rejects immediately.
+ * @platform ios 18.0+
+ */
+export declare function presentAccessPickerAsync(): Promise<string[]>;
 /**
  * Possible fields to retrieve for a contact.
  */
@@ -799,7 +821,11 @@ export declare enum Fields {
     ExtraNames = "extraNames",
     Note = "note",
     Dates = "dates",
-    Relationships = "relationships"
+    Relationships = "relationships",
+    /**
+     * @platform android
+     */
+    IsFavorite = "isFavorite"
 }
 /**
  * This format denotes the common calendar format used to specify how a date is calculated in `nonGregorianBirthday` fields.

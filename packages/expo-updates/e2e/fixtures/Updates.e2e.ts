@@ -81,7 +81,7 @@ const readLogEntriesAsync = async () => {
 const waitForAppToBecomeVisible = async () => {
   await waitFor(element(by.id('updateString')))
     .toBeVisible()
-    .withTimeout(2000);
+    .withTimeout(3000);
 };
 
 describe('Basic tests', () => {
@@ -117,6 +117,11 @@ describe('Basic tests', () => {
     await device.installApp();
     await device.launchApp({
       newInstance: true,
+
+      // The ReactContext is required by detox synchronization on Android.
+      // However ReactContext will be changed after the app is reloaded.
+      // All future tests will be blocked after reloading, so we need to disable synchronization for reload tests.
+      launchArgs: device.getPlatform() === 'android' ? { detoxEnableSynchronization: 0 } : {},
     });
     await waitForAppToBecomeVisible();
 
@@ -131,22 +136,13 @@ describe('Basic tests', () => {
     // it's delayed 2 seconds after the button press in the client so the button press finish registers in detox
     await setTimeout(3000);
 
-    // on android, the react context must be reacquired by detox.
-    // there's no detox public API to tell it that react native
-    // has been reloaded by the client application and that it should
-    // reacquire the react context. Instead, we use the detox reload
-    // API to do a second reload which reacquires the context. This
-    // detox reload method does the same thing that expo-updates reload does
-    // under the hood, so this is ok and is the best we can do. It should
-    // do the job of catching issues in react native either way.
-    if (device.getPlatform() === 'android') {
-      await device.reloadReactNative();
-    }
-
     const isReloadingAfter = await testElementValueAsync('isReloading');
     jestExpect(isReloadingAfter).toBe('false');
     const startTimeAfter = parseInt(await testElementValueAsync('startTime'), 10);
     jestExpect(startTimeAfter).toBeGreaterThan(startTimeBefore);
+
+    const restartCount = await testElementValueAsync('state.restartCount');
+    jestExpect(restartCount).toBe('1');
 
     await device.terminateApp();
   });
@@ -575,6 +571,8 @@ describe('JS API tests', () => {
     jestExpect(isEmbedded).toEqual('true');
     const checkAutomatically = await testElementValueAsync('checkAutomatically');
     jestExpect(checkAutomatically).toEqual('ON_LOAD');
+    const launchDuration = await testElementValueAsync('launchDuration');
+    jestExpect(parseInt(launchDuration, 10)).toBeGreaterThan(0);
 
     // Test extra params
     await pressTestButtonAsync('setExtraParams');
@@ -634,23 +632,29 @@ describe('JS API tests', () => {
     });
     await waitForAppToBecomeVisible();
 
-    // Check state
+    // Check state on launch
     const isUpdatePending = await testElementValueAsync('state.isUpdatePending');
     const isUpdateAvailable = await testElementValueAsync('state.isUpdateAvailable');
     const latestManifestId = await testElementValueAsync('state.latestManifest.id');
     const downloadedManifestId = await testElementValueAsync('state.downloadedManifest.id');
     const isRollback = await testElementValueAsync('state.isRollback');
-
     console.warn(`isUpdatePending = ${isUpdatePending}`);
     console.warn(`isUpdateAvailable = ${isUpdateAvailable}`);
     console.warn(`isRollback = ${isRollback}`);
     console.warn(`latestManifestId = ${latestManifestId}`);
     console.warn(`downloadedManifestId = ${downloadedManifestId}`);
+    jestExpect(isUpdateAvailable).toEqual('false');
+    jestExpect(isUpdatePending).toEqual('false');
+    jestExpect(isRollback).toEqual('false');
+    jestExpect(latestManifestId).toEqual('null');
+    jestExpect(downloadedManifestId).toEqual('null');
 
     const updatesExpoClientEmbeddedString = await testElementValueAsync('updates.expoClient');
     const constantsExpoConfigEmbeddedString = await testElementValueAsync('constants.expoConfig');
     console.warn(`updatesExpoClientEmbedded = ${updatesExpoClientEmbeddedString}`);
     console.warn(`constantsExpoConfigEmbedded = ${constantsExpoConfigEmbeddedString}`);
+    const updatesExpoConfigEmbedded = JSON.parse(updatesExpoClientEmbeddedString);
+    jestExpect(updatesExpoConfigEmbedded).not.toBeNull();
 
     // Now serve a manifest
     Server.start(Update.serverPort, protocolVersion);
@@ -665,12 +669,16 @@ describe('JS API tests', () => {
     const latestManifestId2 = await testElementValueAsync('state.latestManifest.id');
     const downloadedManifestId2 = await testElementValueAsync('state.downloadedManifest.id');
     const isRollback2 = await testElementValueAsync('state.isRollback');
-
     console.warn(`isUpdatePending2 = ${isUpdatePending2}`);
     console.warn(`isUpdateAvailable2 = ${isUpdateAvailable2}`);
     console.warn(`isRollback2 = ${isRollback2}`);
     console.warn(`latestManifestId2 = ${latestManifestId2}`);
     console.warn(`downloadedManifestId2 = ${downloadedManifestId2}`);
+    jestExpect(isUpdateAvailable2).toEqual('true');
+    jestExpect(isUpdatePending2).toEqual('false');
+    jestExpect(isRollback2).toEqual('false');
+    jestExpect(latestManifestId2).toEqual(manifest.id);
+    jestExpect(downloadedManifestId2).toEqual('null');
 
     // Download update and expect isUpdatePending to be true
     await pressTestButtonAsync('downloadUpdate');
@@ -681,20 +689,16 @@ describe('JS API tests', () => {
     const latestManifestId3 = await testElementValueAsync('state.latestManifest.id');
     const downloadedManifestId3 = await testElementValueAsync('state.downloadedManifest.id');
     const isRollback3 = await testElementValueAsync('state.isRollback');
-
     console.warn(`isUpdatePending3 = ${isUpdatePending3}`);
     console.warn(`isUpdateAvailable3 = ${isUpdateAvailable3}`);
     console.warn(`isRollback3 = ${isRollback3}`);
     console.warn(`latestManifestId3 = ${latestManifestId3}`);
     console.warn(`downloadedManifestId3 = ${downloadedManifestId3}`);
-
-    // Test native context reader
-    await pressTestButtonAsync('readNativeStateContext');
-    await waitForAsynchronousTaskCompletion();
-
-    const nativeStateContextString = await testElementValueAsync('nativeStateContextString');
-    const nativeStateContext = JSON.parse(nativeStateContextString);
-    console.warn(`nativeStateContext = ${JSON.stringify(nativeStateContext, null, 2)}`);
+    jestExpect(isUpdateAvailable3).toEqual('true');
+    jestExpect(isUpdatePending3).toEqual('true');
+    jestExpect(isRollback3).toEqual('false');
+    jestExpect(latestManifestId3).toEqual(manifest.id);
+    jestExpect(downloadedManifestId3).toEqual(manifest.id);
 
     // Terminate and relaunch app, we should be running the update, and back to the default state
     await device.terminateApp();
@@ -707,13 +711,18 @@ describe('JS API tests', () => {
     const downloadedManifestId4 = await testElementValueAsync('state.downloadedManifest.id');
     const isRollback4 = await testElementValueAsync('state.isRollback');
     const rollbackCommitTime4 = await testElementValueAsync('state.rollbackCommitTime');
-
     console.warn(`isUpdatePending4 = ${isUpdatePending4}`);
     console.warn(`isUpdateAvailable4 = ${isUpdateAvailable4}`);
     console.warn(`isRollback4 = ${isRollback4}`);
     console.warn(`latestManifestId4 = ${latestManifestId4}`);
     console.warn(`downloadedManifestId4 = ${downloadedManifestId4}`);
     console.warn(`rollbackCommitTime4 = ${rollbackCommitTime4}`);
+    jestExpect(isUpdateAvailable4).toEqual('false');
+    jestExpect(isUpdatePending4).toEqual('false');
+    jestExpect(isRollback4).toEqual('false');
+    jestExpect(latestManifestId4).toEqual('null');
+    jestExpect(downloadedManifestId4).toEqual('null');
+    jestExpect(rollbackCommitTime4).toEqual('null');
 
     const updatesExpoClientUpdateString = await testElementValueAsync('updates.expoClient');
     const constantsExpoConfigUpdateString = await testElementValueAsync('constants.expoConfig');
@@ -734,13 +743,18 @@ describe('JS API tests', () => {
     const downloadedManifestId5 = await testElementValueAsync('state.downloadedManifest.id');
     const isRollback5 = await testElementValueAsync('state.isRollback');
     const rollbackCommitTime5 = await testElementValueAsync('state.rollbackCommitTime');
-
     console.warn(`isUpdatePending5 = ${isUpdatePending5}`);
     console.warn(`isUpdateAvailable5 = ${isUpdateAvailable5}`);
     console.warn(`isRollback5 = ${isRollback5}`);
     console.warn(`latestManifestId5 = ${latestManifestId5}`);
     console.warn(`downloadedManifestId5 = ${downloadedManifestId5}`);
     console.warn(`rollbackCommitTime5 = ${rollbackCommitTime5}`);
+    jestExpect(isUpdateAvailable5).toEqual('true');
+    jestExpect(isUpdatePending5).toEqual('false');
+    jestExpect(isRollback5).toEqual('true');
+    jestExpect(latestManifestId5).toEqual('null');
+    jestExpect(downloadedManifestId5).toEqual('null');
+    jestExpect(rollbackCommitTime5).not.toEqual('null');
 
     // Terminate and relaunch app, we should be running the original bundle again, and back to the default state
     await device.terminateApp();
@@ -766,48 +780,6 @@ describe('JS API tests', () => {
     console.warn(`updatesExpoConfigRollback = ${updatesExpoConfigRollbackString}`);
     console.warn(`constantsExpoConfigRollback = ${constantsExpoConfigRollbackString}`);
 
-    // Unpack expo config values and check them
-    const updatesExpoConfigEmbedded = JSON.parse(updatesExpoClientEmbeddedString);
-    jestExpect(updatesExpoConfigEmbedded).not.toBeNull();
-
-    // Verify correct behavior
-    // On launch
-    jestExpect(isUpdateAvailable).toEqual('false');
-    jestExpect(isUpdatePending).toEqual('false');
-    jestExpect(isRollback).toEqual('false');
-    jestExpect(latestManifestId).toEqual('');
-    jestExpect(downloadedManifestId).toEqual('');
-    // After check for update and getting a manifest
-    jestExpect(isUpdateAvailable2).toEqual('true');
-    jestExpect(isUpdatePending2).toEqual('false');
-    jestExpect(isRollback2).toEqual('false');
-    jestExpect(latestManifestId2).toEqual(manifest.id);
-    jestExpect(downloadedManifestId2).toEqual('');
-    // After downloading the update
-    jestExpect(isUpdateAvailable3).toEqual('true');
-    jestExpect(isUpdatePending3).toEqual('true');
-    jestExpect(isRollback3).toEqual('false');
-    jestExpect(latestManifestId3).toEqual(manifest.id);
-    jestExpect(downloadedManifestId3).toEqual(manifest.id);
-    // native state context values
-    jestExpect(nativeStateContext.latestManifest?.id).toEqual(manifest.id);
-    jestExpect(nativeStateContext.isUpdateAvailable).toBe(true);
-    jestExpect(nativeStateContext.isUpdatePending).toBe(true);
-    // After restarting
-    jestExpect(isUpdateAvailable4).toEqual('false');
-    jestExpect(isUpdatePending4).toEqual('false');
-    jestExpect(isRollback4).toEqual('false');
-    jestExpect(latestManifestId4).toEqual('');
-    jestExpect(downloadedManifestId4).toEqual('');
-    jestExpect(rollbackCommitTime4).toEqual('');
-    // After check for update and getting a rollback
-    jestExpect(isUpdateAvailable5).toEqual('true');
-    jestExpect(isUpdatePending5).toEqual('false');
-    jestExpect(isRollback5).toEqual('true');
-    jestExpect(latestManifestId5).toEqual('');
-    jestExpect(downloadedManifestId5).toEqual('');
-    jestExpect(rollbackCommitTime5).not.toEqual('');
-
     // Check for update, and expect isRollback to be true
     await pressTestButtonAsync('triggerParallelFetchAndDownload');
     await waitForAsynchronousTaskCompletion(4000);
@@ -829,119 +801,128 @@ describe('JS API tests', () => {
 // These tests all make use of the additional UpdatesE2ETestModule, which provides methods for
 // clearing and reading the .expo-internal folder.
 describe('Asset deletion recovery tests', () => {
+  const shouldCopyEmbeddedAssets = platform !== 'android';
+  const itWhenCopyEmbeddedAssets = shouldCopyEmbeddedAssets ? it : xit;
+
   afterEach(async () => {
     await device.uninstallApp();
     Server.stop();
   });
 
-  it('embedded assets deleted from internal storage should be re-copied', async () => {
-    // Simplest scenario; only one update (embedded) is loaded, then assets are cleared from
-    // internal storage. The app is then relaunched with the same embedded update.
-    // DatabaseLauncher should copy all the missing assets and run the update as normal.
+  itWhenCopyEmbeddedAssets(
+    'embedded assets deleted from internal storage should be re-copied',
+    async () => {
+      // Simplest scenario; only one update (embedded) is loaded, then assets are cleared from
+      // internal storage. The app is then relaunched with the same embedded update.
+      // DatabaseLauncher should copy all the missing assets and run the update as normal.
 
-    Server.start(Update.serverPort, protocolVersion);
+      Server.start(Update.serverPort, protocolVersion);
 
-    // Install the app and immediately send it a message to clear internal storage. Verify storage
-    // has been cleared properly.
-    await device.installApp();
-    await device.launchApp({
-      newInstance: true,
-    });
-    await waitForAppToBecomeVisible();
+      // Install the app and immediately send it a message to clear internal storage. Verify storage
+      // has been cleared properly.
+      await device.installApp();
+      await device.launchApp({
+        newInstance: true,
+      });
+      await waitForAppToBecomeVisible();
 
-    // Check that we are running the embedded update
-    const isEmbedded = await testElementValueAsync('isEmbeddedLaunch');
-    jestExpect(isEmbedded).toEqual('true');
+      // Check that we are running the embedded update
+      const isEmbedded = await testElementValueAsync('isEmbeddedLaunch');
+      jestExpect(isEmbedded).toEqual('true');
 
-    // Check that asset files are present
-    let numAssets = await checkNumAssetsAsync();
-    jestExpect(numAssets).toBeGreaterThan(2);
+      // Check that asset files are present
+      let numAssets = await checkNumAssetsAsync();
+      jestExpect(numAssets).toBeGreaterThan(2);
 
-    // Get current update ID
-    const updateID = await testElementValueAsync('updateID');
+      // Get current update ID
+      const updateID = await testElementValueAsync('updateID');
 
-    // Clear assets and check that number of assets is now 0
-    await clearNumAssetsAsync();
-    numAssets = await checkNumAssetsAsync();
-    jestExpect(numAssets).toBe(0);
+      // Clear assets and check that number of assets is now 0
+      await clearNumAssetsAsync();
+      numAssets = await checkNumAssetsAsync();
+      jestExpect(numAssets).toBe(0);
 
-    // Stop and then restart app.
-    await device.terminateApp();
-    await device.launchApp();
-    await waitForAppToBecomeVisible();
+      // Stop and then restart app.
+      await device.terminateApp();
+      await device.launchApp();
+      await waitForAppToBecomeVisible();
 
-    // Check that assets are restored from DB
-    numAssets = await checkNumAssetsAsync();
-    jestExpect(numAssets).toBeGreaterThan(2);
+      // Check that assets are restored from DB
+      numAssets = await checkNumAssetsAsync();
+      jestExpect(numAssets).toBeGreaterThan(2);
 
-    // Check that update ID is the same
-    const updateID2 = await testElementValueAsync('updateID');
-    jestExpect(updateID2).toEqual(updateID);
+      // Check that update ID is the same
+      const updateID2 = await testElementValueAsync('updateID');
+      jestExpect(updateID2).toEqual(updateID);
 
-    // Check for log messages
-    const logEntries = await readLogEntriesAsync();
-    console.warn(
-      'Total number of log entries = ' +
-        logEntries.length +
-        '\n' +
-        JSON.stringify(logEntries, null, 2)
-    );
-    jestExpect(logEntries.length).toBeGreaterThan(0);
-  });
+      // Check for log messages
+      const logEntries = await readLogEntriesAsync();
+      console.warn(
+        'Total number of log entries = ' +
+          logEntries.length +
+          '\n' +
+          JSON.stringify(logEntries, null, 2)
+      );
+      jestExpect(logEntries.length).toBeGreaterThan(0);
+    }
+  );
 
-  it('embedded assets deleted from internal storage should be re-copied from a new embedded update', async () => {
-    // This test ensures that when trying to launch a NEW update that includes some OLD assets we
-    // already have (according to SQLite), even if those assets are actually missing from disk
-    // (but included in the embedded update) DatabaseLauncher can recover.
-    //
-    // To create this scenario, we load a single (embedded) update, then clear assets from
-    // internal storage. Then we install a NEW build with a NEW embedded update but that includes
-    // some of the same assets. When we launch this new build, DatabaseLauncher should still copy
-    // the missing assets and run the update as normal.
+  itWhenCopyEmbeddedAssets(
+    'embedded assets deleted from internal storage should be re-copied from a new embedded update',
+    async () => {
+      // This test ensures that when trying to launch a NEW update that includes some OLD assets we
+      // already have (according to SQLite), even if those assets are actually missing from disk
+      // (but included in the embedded update) DatabaseLauncher can recover.
+      //
+      // To create this scenario, we load a single (embedded) update, then clear assets from
+      // internal storage. Then we install a NEW build with a NEW embedded update but that includes
+      // some of the same assets. When we launch this new build, DatabaseLauncher should still copy
+      // the missing assets and run the update as normal.
 
-    Server.start(Update.serverPort, protocolVersion);
+      Server.start(Update.serverPort, protocolVersion);
 
-    // Install the app and immediately send it a message to clear internal storage. Verify storage
-    // has been cleared properly.
-    await device.installApp();
-    await device.launchApp({
-      newInstance: true,
-    });
-    await waitForAppToBecomeVisible();
+      // Install the app and immediately send it a message to clear internal storage. Verify storage
+      // has been cleared properly.
+      await device.installApp();
+      await device.launchApp({
+        newInstance: true,
+      });
+      await waitForAppToBecomeVisible();
 
-    // Save the number of assets in storage
-    const numAssetsSaved = await checkNumAssetsAsync();
-    jestExpect(numAssetsSaved).toBeGreaterThan(0);
+      // Save the number of assets in storage
+      const numAssetsSaved = await checkNumAssetsAsync();
+      jestExpect(numAssetsSaved).toBeGreaterThan(0);
 
-    // Clear assets and check that number of assets is now 0
-    await clearNumAssetsAsync();
-    let numAssets = await checkNumAssetsAsync();
-    jestExpect(numAssets).toBe(0);
+      // Clear assets and check that number of assets is now 0
+      await clearNumAssetsAsync();
+      let numAssets = await checkNumAssetsAsync();
+      jestExpect(numAssets).toBe(0);
 
-    // Stop the app and install a newer build on top of it. The newer build has a different
-    // embedded update (different updateId) but still includes some of the same assets. Now SQLite
-    // thinks we already have these assets, but we actually just deleted them from internal
-    // storage.
-    await device.terminateApp();
-    await device.installApp();
+      // Stop the app and install a newer build on top of it. The newer build has a different
+      // embedded update (different updateId) but still includes some of the same assets. Now SQLite
+      // thinks we already have these assets, but we actually just deleted them from internal
+      // storage.
+      await device.terminateApp();
+      await device.installApp();
 
-    // Start the new build, and immediately send it a message to read internal storage.
-    await device.launchApp({
-      newInstance: true,
-    });
-    await waitForAppToBecomeVisible();
+      // Start the new build, and immediately send it a message to read internal storage.
+      await device.launchApp({
+        newInstance: true,
+      });
+      await waitForAppToBecomeVisible();
 
-    // Verify all the assets that were deleted have been re-copied back into internal storage, and
-    // that we are running a DIFFERENT update than before -- otherwise this test is no different
-    // from the previous one.
-    numAssets = await checkNumAssetsAsync();
-    jestExpect(numAssets).toEqual(numAssetsSaved);
+      // Verify all the assets that were deleted have been re-copied back into internal storage, and
+      // that we are running a DIFFERENT update than before -- otherwise this test is no different
+      // from the previous one.
+      numAssets = await checkNumAssetsAsync();
+      jestExpect(numAssets).toEqual(numAssetsSaved);
 
-    // TODO: develop a way to modify the embedded update used by the build in a Detox test environment,
-    // so that we can actually do this test with a real modified update. Until then, disable the line below
-    // to allow the test to pass.
-    //jestExpect(readAssetsMessage.updateId).not.toEqual(clearAssetsMessage.updateId);
-  });
+      // TODO: develop a way to modify the embedded update used by the build in a Detox test environment,
+      // so that we can actually do this test with a real modified update. Until then, disable the line below
+      // to allow the test to pass.
+      //jestExpect(readAssetsMessage.updateId).not.toEqual(clearAssetsMessage.updateId);
+    }
+  );
 
   it('assets in a downloaded update deleted from internal storage should be re-copied or re-downloaded', async () => {
     // This test ensures we can (or at least try to) recover missing assets that originated from a
@@ -979,6 +960,24 @@ describe('Asset deletion recovery tests', () => {
         };
       })
     );
+
+    // Append a new asset that is not embedded and should be re-downloaded
+    async function createNewAssetAsync(file: string = 'patrick-untersee-XJjsuuDwWas-unsplash.jpg') {
+      const newAsset = path.join(__dirname, 'assets', file);
+      const filename = path.basename(newAsset);
+      const mimeType = 'image/jpg';
+      const key = filename.replace('asset_', '').replace(/\.[^/.]+$/, '');
+      const hash = await Update.copyAssetToStaticFolder(newAsset, filename);
+      return {
+        hash,
+        key,
+        contentType: mimeType,
+        fileExtension: '.jpg',
+        url: `http://${Update.serverHost}:${Update.serverPort}/static/${filename}`,
+      };
+    }
+    assets.push(await createNewAssetAsync());
+
     const manifest = Update.getUpdateManifestForBundleFilename(
       new Date(),
       bundleHash,
@@ -997,13 +996,14 @@ describe('Asset deletion recovery tests', () => {
 
     // give the app time to load the new update in the background
     await waitForExpectationAsync(
-      () => jestExpect(Server.getRequestedStaticFilesLength()).toBe(1),
+      () => jestExpect(Server.getRequestedStaticFilesLength()).toBe(2),
       {
         timeout: 10000,
         interval: 1000,
       }
     );
-    jestExpect(Server.consumeRequestedStaticFiles().length).toBe(1); // only the bundle should be new
+    // only the bundle and the new asset should be requested
+    jestExpect(Server.consumeRequestedStaticFiles().length).toBe(2);
 
     // Stop and restart the app so it will launch the new update. Immediately send it a message to
     // clear internal storage while also verifying the new update is running.
@@ -1032,13 +1032,15 @@ describe('Asset deletion recovery tests', () => {
     // With asset exclusion, on Android, the number of assets found may be greater than the number in the manifest,
     // as the total will include embedded assets that were copied.
     numAssets = await checkNumAssetsAsync();
+    const expectedNumAssets = shouldCopyEmbeddedAssets ? manifest.assets.length + 1 : 2;
     if (platform === 'ios') {
-      jestExpect(numAssets).toBe(manifest.assets.length + 1);
+      jestExpect(numAssets).toBe(expectedNumAssets);
     } else {
-      jestExpect(numAssets).toBeGreaterThanOrEqual(manifest.assets.length + 1);
+      jestExpect(numAssets).toBeGreaterThanOrEqual(expectedNumAssets);
     }
     updateID = await testElementValueAsync('updateID');
     jestExpect(updateID).toEqual(manifest.id);
-    jestExpect(Server.consumeRequestedStaticFiles().length).toBe(1); // should have re-downloaded only the JS bundle; the rest should have been copied from the app binary
+    // should have re-downloaded only the JS bundle and the new asset; the rest should have been copied from the app binary.
+    jestExpect(Server.consumeRequestedStaticFiles().length).toBe(2);
   });
 });

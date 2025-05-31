@@ -1,30 +1,44 @@
-import { EventEmitter, EventSubscription } from 'fbemitter';
-
+import { MessageFramePacker } from './MessageFramePacker';
 import { WebSocketBackingStore } from './WebSocketBackingStore';
 import { WebSocketWithReconnect } from './WebSocketWithReconnect';
-import type { ConnectionInfo } from './devtools.types';
+import type {
+  ConnectionInfo,
+  DevToolsPluginClientOptions,
+  HandshakeMessageParams,
+} from './devtools.types';
 import * as logger from './logger';
+import { blobToArrayBufferAsync } from '../utils/blobUtils';
 
-// This version should be synced with the one in the **createMessageSocketEndpoint.ts** in @react-native-community/cli-server-api
-export const MESSAGE_PROTOCOL_VERSION = 2;
+interface MessageFramePackerMessageKey {
+  pluginName: string;
+  method: string;
+}
 
-export const DevToolsPluginMethod = 'Expo:DevToolsPlugin';
+export interface EventSubscription {
+  remove(): void;
+}
 
 /**
  * This client is for the Expo DevTools Plugins to communicate between the app and the DevTools webpage hosted in a browser.
  * All the code should be both compatible with browsers and React Native.
  */
 export abstract class DevToolsPluginClient {
-  protected eventEmitter: EventEmitter = new EventEmitter();
+  private listeners: Record<string, undefined | Set<(params: any) => void>>;
 
   private static defaultWSStore: WebSocketBackingStore = new WebSocketBackingStore();
   private readonly wsStore: WebSocketBackingStore = DevToolsPluginClient.defaultWSStore;
 
   protected isClosed = false;
   protected retries = 0;
+  private readonly messageFramePacker: MessageFramePacker<MessageFramePackerMessageKey> =
+    new MessageFramePacker();
 
-  public constructor(public readonly connectionInfo: ConnectionInfo) {
+  public constructor(
+    public readonly connectionInfo: ConnectionInfo,
+    private readonly options?: DevToolsPluginClientOptions
+  ) {
     this.wsStore = connectionInfo.wsStore || DevToolsPluginClient.defaultWSStore;
+    this.listeners = Object.create(null);
   }
 
   /**
@@ -50,7 +64,7 @@ export abstract class DevToolsPluginClient {
       this.wsStore.ws?.close();
       this.wsStore.ws = null;
     }
-    this.eventEmitter.removeAllListeners();
+    this.listeners = Object.create(null);
   }
 
   /**
@@ -63,17 +77,18 @@ export abstract class DevToolsPluginClient {
       logger.warn('Unable to send message in a disconnected state.');
       return;
     }
-
-    const payload: Record<string, any> = {
-      version: MESSAGE_PROTOCOL_VERSION,
+    const messageKey: MessageFramePackerMessageKey = {
       pluginName: this.connectionInfo.pluginName,
-      method: DevToolsPluginMethod,
-      params: {
-        method,
-        params,
-      },
+      method,
     };
-    this.wsStore.ws?.send(JSON.stringify(payload));
+    const packedData = this.messageFramePacker.pack({ messageKey, payload: params });
+    if (!(packedData instanceof Promise)) {
+      this.wsStore.ws?.send(packedData);
+      return;
+    }
+    packedData.then((data) => {
+      this.wsStore.ws?.send(data);
+    });
   }
 
   /**
@@ -82,7 +97,13 @@ export abstract class DevToolsPluginClient {
    * @param listener Listener to be called when a message is received.
    */
   public addMessageListener(method: string, listener: (params: any) => void): EventSubscription {
-    return this.eventEmitter.addListener(method, listener);
+    const listenersForMethod = this.listeners[method] || (this.listeners[method] = new Set());
+    listenersForMethod.add(listener);
+    return {
+      remove: () => {
+        this.listeners[method]?.delete(listener);
+      },
+    };
   }
 
   /**
@@ -91,7 +112,56 @@ export abstract class DevToolsPluginClient {
    * @param listener Listener to be called when a message is received.
    */
   public addMessageListenerOnce(method: string, listener: (params: any) => void): void {
-    this.eventEmitter.once(method, listener);
+    const wrappedListenerOnce = (params: any): void => {
+      listener(params);
+      this.listeners[method]?.delete(wrappedListenerOnce);
+    };
+    this.addMessageListener(method, wrappedListenerOnce);
+  }
+
+  /**
+   * Internal handshake message sender.
+   * @hidden
+   */
+  protected sendHandshakeMessage(params: HandshakeMessageParams) {
+    if (this.wsStore.ws?.readyState === WebSocket.CLOSED) {
+      logger.warn('Unable to send message in a disconnected state.');
+      return;
+    }
+    this.wsStore.ws?.send(JSON.stringify({ ...params, __isHandshakeMessages: true }));
+  }
+
+  /**
+   * Internal handshake message listener.
+   * @hidden
+   */
+  protected addHandskakeMessageListener(
+    listener: (params: HandshakeMessageParams) => void
+  ): EventSubscription {
+    const messageListener = (event: MessageEvent) => {
+      if (typeof event.data !== 'string') {
+        // binary data is not coming from the handshake messages.
+        return;
+      }
+
+      const data = JSON.parse(event.data);
+      if (!data.__isHandshakeMessages) {
+        return;
+      }
+      delete data.__isHandshakeMessages;
+      const params = data as HandshakeMessageParams;
+      if (params.pluginName && params.pluginName !== this.connectionInfo.pluginName) {
+        return;
+      }
+      listener(params);
+    };
+
+    this.wsStore.ws?.addEventListener('message', messageListener);
+    return {
+      remove: () => {
+        this.wsStore.ws?.removeEventListener('message', messageListener);
+      },
+    };
   }
 
   /**
@@ -106,7 +176,9 @@ export abstract class DevToolsPluginClient {
    */
   protected connectAsync(): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocketWithReconnect(`ws://${this.connectionInfo.devServer}/message`, {
+      const endpoint = 'expo-dev-plugins/broadcast';
+      const ws = new WebSocketWithReconnect(`ws://${this.connectionInfo.devServer}/${endpoint}`, {
+        binaryType: this.options?.websocketBinaryType,
         onError: (e: unknown) => {
           if (e instanceof Error) {
             console.warn(`Error happened from the WebSocket connection: ${e.message}\n${e.stack}`);
@@ -127,23 +199,35 @@ export abstract class DevToolsPluginClient {
     });
   }
 
-  protected handleMessage = (event: WebSocketMessageEvent): void => {
-    let payload;
-    try {
-      payload = JSON.parse(event.data);
-    } catch (e) {
-      logger.info('Failed to parse JSON', e);
+  protected handleMessage = async (event: WebSocketMessageEvent) => {
+    let data: ArrayBuffer | string;
+    if (typeof event.data === 'string') {
+      data = event.data;
+    } else if (event.data instanceof ArrayBuffer) {
+      data = event.data;
+    } else if (ArrayBuffer.isView(event.data)) {
+      data = event.data.buffer as ArrayBuffer;
+    } else if (event.data instanceof Blob) {
+      data = await blobToArrayBufferAsync(event.data);
+    } else {
+      logger.warn('Unsupported received data type in handleMessageImpl');
+      return;
+    }
+    const { messageKey, payload, ...rest } = this.messageFramePacker.unpack(data);
+    // @ts-expect-error: `__isHandshakeMessages` is a private field that is not part of the MessageFramePacker type.
+    if (rest?.__isHandshakeMessages === true) {
+      return;
+    }
+    if (messageKey.pluginName && messageKey.pluginName !== this.connectionInfo.pluginName) {
       return;
     }
 
-    if (payload.version !== MESSAGE_PROTOCOL_VERSION || payload.method !== DevToolsPluginMethod) {
-      return;
+    const listenersForMethod = this.listeners[messageKey.method];
+    if (listenersForMethod) {
+      for (const listener of listenersForMethod) {
+        listener(payload);
+      }
     }
-    if (payload.pluginName && payload.pluginName !== this.connectionInfo.pluginName) {
-      return;
-    }
-
-    this.eventEmitter.emit(payload.params.method, payload.params.params);
   };
 
   /**

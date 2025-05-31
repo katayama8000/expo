@@ -1,17 +1,13 @@
 package expo.modules.updates.errorrecovery
 
-import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Log
-import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.DefaultJSExceptionHandler
-import com.facebook.react.bridge.ReactContext
+import com.facebook.react.bridge.JSExceptionHandler
 import com.facebook.react.bridge.ReactMarker
 import com.facebook.react.bridge.ReactMarker.MarkerListener
 import com.facebook.react.bridge.ReactMarkerConstants
-import com.facebook.react.config.ReactFeatureFlags
-import com.facebook.react.devsupport.DisabledDevSupportManager
+import com.facebook.react.devsupport.ReleaseDevSupportManager
 import com.facebook.react.devsupport.interfaces.DevSupportManager
 import expo.modules.updates.logging.UpdatesErrorCode
 import expo.modules.updates.logging.UpdatesLogger
@@ -31,13 +27,13 @@ import java.lang.ref.WeakReference
  * and so there is no more need to trigger the error recovery pipeline.
  */
 class ErrorRecovery(
-  private val context: Context
+  private val logger: UpdatesLogger,
+  private val enableBridgelessArchitecture: Boolean = true
 ) {
   internal val handlerThread = HandlerThread("expo-updates-error-recovery")
   internal lateinit var handler: Handler
-  internal val logger = UpdatesLogger(context)
 
-  private var weakReactContext: WeakReference<ReactContext>? = null
+  private var weakDevSupportManager: WeakReference<DevSupportManager>? = null
   private var previousExceptionHandler: DefaultJSExceptionHandler? = null
   private var shouldHandleReactInstanceException = false
 
@@ -48,9 +44,9 @@ class ErrorRecovery(
     }
   }
 
-  fun startMonitoring(reactContext: ReactContext) {
+  fun startMonitoring(devSupportManager: DevSupportManager) {
     registerContentAppearedListener()
-    registerErrorHandler(reactContext)
+    registerErrorHandler(devSupportManager)
   }
 
   /**
@@ -69,7 +65,7 @@ class ErrorRecovery(
   }
 
   internal fun handleException(exception: Exception) {
-    logger.error("ErrorRecovery: exception encountered: ${exception.localizedMessage}", UpdatesErrorCode.Unknown, exception)
+    logger.error("ErrorRecovery: exception encountered: ${exception.localizedMessage}", exception, UpdatesErrorCode.Unknown)
     handler.sendMessage(handler.obtainMessage(ErrorRecoveryHandler.MessageType.EXCEPTION_ENCOUNTERED, exception))
   }
 
@@ -101,53 +97,38 @@ class ErrorRecovery(
     ReactMarker.removeListener(contentAppearedListener)
   }
 
-  private fun getDevSupportManager(reactContext: ReactContext): DevSupportManager {
-    val reactApplication = reactContext.applicationContext as ReactApplication
-    if (ReactFeatureFlags.enableBridgelessArchitecture) {
-      val reactHost = reactApplication.reactHost
-      check(reactHost != null)
-      return reactHost.devSupportManager ?: throw IllegalStateException("Unable to get DevSupportManager from ReactHost")
-    }
-
-    return reactApplication.reactNativeHost.reactInstanceManager.devSupportManager
-  }
-
-  private fun registerErrorHandler(reactContext: ReactContext) {
-    if (ReactFeatureFlags.enableBridgelessArchitecture) {
-      registerErrorHandlerImplBridgeless(reactContext)
+  private fun registerErrorHandler(devSupportManager: DevSupportManager) {
+    if (enableBridgelessArchitecture) {
+      registerErrorHandlerImplBridgeless()
     } else {
-      registerErrorHandlerImplBridge(reactContext)
+      registerErrorHandlerImplBridge(devSupportManager)
     }
   }
 
-  private fun registerErrorHandlerImplBridgeless(reactContext: ReactContext) {
+  private fun registerErrorHandlerImplBridgeless() {
     shouldHandleReactInstanceException = true
   }
 
-  private fun registerErrorHandlerImplBridge(reactContext: ReactContext) {
-    val devSupportManager = getDevSupportManager(reactContext)
-    if (devSupportManager !is DisabledDevSupportManager) {
-      Log.d(TAG, "Unexpected type of ReactInstanceManager.DevSupportManager. expo-updates error recovery will not behave properly.")
+  private fun registerErrorHandlerImplBridge(devSupportManager: DevSupportManager) {
+    if (devSupportManager !is ReleaseDevSupportManager) {
+      logger.debug("Unexpected type of ReactInstanceManager.DevSupportManager. expo-updates error recovery will not behave properly.")
       return
     }
 
-    val defaultJSExceptionHandler = object : DefaultJSExceptionHandler() {
-      override fun handleException(e: Exception?) {
-        this@ErrorRecovery.handleException(e!!)
-      }
-    }
+    val defaultJSExceptionHandler = JSExceptionHandler { e -> this@ErrorRecovery.handleException(e) }
+
     val devSupportManagerClass = devSupportManager.javaClass
-    previousExceptionHandler = devSupportManagerClass.getDeclaredField("mDefaultJSExceptionHandler").let { field ->
+    previousExceptionHandler = devSupportManagerClass.getDeclaredField("defaultJSExceptionHandler").let { field ->
       field.isAccessible = true
       val previousValue = field[devSupportManager]
       field[devSupportManager] = defaultJSExceptionHandler
       return@let previousValue as DefaultJSExceptionHandler
     }
-    weakReactContext = WeakReference(reactContext)
+    weakDevSupportManager = WeakReference(devSupportManager)
   }
 
   private fun unregisterErrorHandler() {
-    if (ReactFeatureFlags.enableBridgelessArchitecture) {
+    if (enableBridgelessArchitecture) {
       unregisterErrorHandlerImplBridgeless()
     } else {
       unregisterErrorHandlerImplBridge()
@@ -159,10 +140,9 @@ class ErrorRecovery(
   }
 
   private fun unregisterErrorHandlerImplBridge() {
-    weakReactContext?.get()?.let { reactContext ->
-      val devSupportManager = getDevSupportManager(reactContext)
-      if (devSupportManager !is DisabledDevSupportManager) {
-        Log.d(TAG, "Unexpected type of ReactInstanceManager.DevSupportManager. expo-updates could not unregister its error handler")
+    weakDevSupportManager?.get()?.let { devSupportManager ->
+      if (devSupportManager !is ReleaseDevSupportManager) {
+        logger.debug("Unexpected type of ReactInstanceManager.DevSupportManager. expo-updates could not unregister its error handler")
         return
       }
       if (previousExceptionHandler == null) {
@@ -170,11 +150,11 @@ class ErrorRecovery(
       }
 
       val devSupportManagerClass = devSupportManager.javaClass
-      devSupportManagerClass.getDeclaredField("mDefaultJSExceptionHandler").let { field ->
+      devSupportManagerClass.getDeclaredField("defaultJSExceptionHandler").let { field ->
         field.isAccessible = true
         field[devSupportManager] = previousExceptionHandler
       }
-      weakReactContext = null
+      weakDevSupportManager = null
     }
     // quitSafely will wait for processing messages to finish but cancel all messages scheduled for
     // a future time, so delay for a few more seconds in case there are any scheduled messages

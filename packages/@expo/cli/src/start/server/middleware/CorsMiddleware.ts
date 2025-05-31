@@ -20,13 +20,14 @@ export function createCorsMiddleware(exp: ExpoConfig) {
 
   return (req: ServerRequest, res: ServerResponse, next: (err?: Error) => void) => {
     if (typeof req.headers.origin === 'string') {
-      const { hostname } = new URL(req.headers.origin);
-      if (!allowedHostnames.includes(hostname)) {
+      const { host, hostname } = new URL(req.headers.origin);
+      const isSameOrigin = host === req.headers.host;
+      if (!isSameOrigin && !allowedHostnames.includes(hostname)) {
         next(
           new Error(
             `Unauthorized request from ${req.headers.origin}. ` +
               'This may happen because of a conflicting browser extension to intercept HTTP requests. ' +
-              'Please try again without browser extensions or using incognito mode.'
+              'Disable browser extensions or use incognito mode and try again.'
           )
         );
         return;

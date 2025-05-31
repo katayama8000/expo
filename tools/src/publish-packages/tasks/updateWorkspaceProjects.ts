@@ -1,7 +1,6 @@
 import JsonFile from '@expo/json-file';
 import chalk from 'chalk';
 import path from 'path';
-import semver from 'semver';
 
 import { EXPO_DIR } from '../../Constants';
 import logger from '../../Logger';
@@ -39,6 +38,8 @@ export const updateWorkspaceProjects = new Task<TaskArgs>(
       Object.entries(workspaceInfo).map(async ([projectName, projectInfo]) => {
         const projectDependencies = [
           ...projectInfo.workspaceDependencies,
+          ...projectInfo.workspacePeerDependencies,
+          ...projectInfo.workspaceOptionalDependencies,
           ...projectInfo.mismatchedWorkspaceDependencies,
         ]
           .map((dependencyName) => parcelsObject[dependencyName])
@@ -68,8 +69,11 @@ export const updateWorkspaceProjects = new Task<TaskArgs>(
             const currentVersionRange = dependenciesObject[pkg.packageName];
 
             if (
-              !currentVersionRange ||
-              !shouldUpdateDependencyVersion(projectName, currentVersionRange, state.releaseVersion)
+              !shouldUpdateDependencyVersion({
+                currentVersionRange,
+                dependencyType: dependenciesKey,
+                isCanaryRelease: options.canary,
+              })
             ) {
               continue;
             }
@@ -102,14 +106,30 @@ export const updateWorkspaceProjects = new Task<TaskArgs>(
 );
 
 /**
- * Returns boolean indicating if the version range should be updated. Our policy assumes that `expo` package controls versions
- * of other expo packages (e.g. expo-modules-core, expo-modules-autolinking). Any other package (or workspace project)
- * doesn't need to be updated as long as the new version still satisfies the version range.
+ * Returns boolean indicating if the version range should be updated. We update them in most cases,
+ * except for peer and optional dependencies with `*` range which are updated only for canary releases.
  *
- * @param packageName Name of the package to update
- * @param currentRange Current version range of the dependency
- * @param version The new version of the dependency
+ * @param context.currentVersionRange Current version range of the dependency
+ * @param context.dependencyType What type of dependency we are updating
+ * @param context.canary If this is a canary release
  */
-function shouldUpdateDependencyVersion(packageName: string, currentRange: string, version: string) {
-  return packageName === 'expo' || !semver.satisfies(version, currentRange);
+function shouldUpdateDependencyVersion(context: {
+  currentVersionRange?: string;
+  dependencyType: string;
+  isCanaryRelease: boolean;
+}) {
+  // Do not update the version if there is no current version range
+  if (!context.currentVersionRange) {
+    return false;
+  }
+
+  // Only update the peerDependencies & optionalDependencies, where the version is `*`, during canary releases
+  // Custom versioning like `x.x.x-canary-...` are NOT included when using `*` as version
+  if (
+    context.currentVersionRange === '*' &&
+    ['peerDependencies', 'optionalDependencies'].includes(context.dependencyType)
+  ) {
+    return context.isCanaryRelease;
+  }
+  return true;
 }

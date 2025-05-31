@@ -1,4 +1,3 @@
-import { getUserStatePath } from '@expo/config/build/getUserState';
 import { fs, vol } from 'memfs';
 import nock from 'nock';
 
@@ -7,7 +6,7 @@ import {
   getDevelopmentCodeSigningDirectory,
 } from '../../../utils/codesigning';
 import { getExpoApiBaseUrl } from '../../endpoint';
-import UserSettings from '../UserSettings';
+import { getSession, getSettingsFilePath } from '../UserSettings';
 import { getSessionUsingBrowserAuthFlowAsync } from '../expoSsoLauncher';
 import {
   Actor,
@@ -23,7 +22,6 @@ jest.mock('../expoSsoLauncher', () => ({
 }));
 
 jest.mock('../../../log');
-jest.mock('../../../utils/telemetry');
 jest.unmock('../UserSettings');
 jest.mock('../../graphql/client', () => ({
   graphqlClient: {
@@ -122,7 +120,7 @@ describe(loginAsync, () => {
     mockLoginRequest();
     await loginAsync({ username: 'USERNAME', password: 'PASSWORD' });
 
-    expect(await fs.promises.readFile(getUserStatePath(), 'utf8')).toMatchInlineSnapshot(`
+    expect(await fs.promises.readFile(getSettingsFilePath(), 'utf8')).toMatchInlineSnapshot(`
       "{
         "auth": {
           "sessionSecret": "SESSION_SECRET",
@@ -142,7 +140,7 @@ describe(ssoLoginAsync, () => {
 
     await ssoLoginAsync();
 
-    expect(await fs.promises.readFile(getUserStatePath(), 'utf8')).toMatchInlineSnapshot(`
+    expect(await fs.promises.readFile(getSettingsFilePath(), 'utf8')).toMatchInlineSnapshot(`
       "{
         "auth": {
           "sessionSecret": "SESSION_SECRET",
@@ -161,10 +159,10 @@ describe(logoutAsync, () => {
   it('removes the session secret', async () => {
     mockLoginRequest();
     await loginAsync({ username: 'USERNAME', password: 'PASSWORD' });
-    expect(UserSettings.getSession()?.sessionSecret).toBe('SESSION_SECRET');
+    expect(getSession()?.sessionSecret).toBe('SESSION_SECRET');
 
     await logoutAsync();
-    expect(UserSettings.getSession()?.sessionSecret).toBeUndefined();
+    expect(getSession()?.sessionSecret).toBeUndefined();
   });
 
   it('removes code signing data', async () => {

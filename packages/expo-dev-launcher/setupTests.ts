@@ -8,8 +8,6 @@ global.fetch = jest.fn().mockResolvedValue({
 
 afterEach(cleanup);
 
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
-
 jest.mock('react-native-reanimated', () => {
   const Reanimated = require('react-native-reanimated/mock');
 
@@ -21,7 +19,7 @@ jest.mock('react-native-reanimated', () => {
 });
 
 jest.mock('react-native/Libraries/Components/Switch/Switch', () => {
-  const View = require('react-native/Libraries/Components/View/View');
+  const View = require('react-native/Libraries/Components/View/View').default;
   const React = require('react');
   function MockSwitch(props) {
     return React.createElement(View, { ...props, onPress: props.onValueChange });

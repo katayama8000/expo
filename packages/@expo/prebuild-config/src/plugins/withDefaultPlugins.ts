@@ -12,19 +12,21 @@ import {
 import { ExpoConfig } from '@expo/config-types';
 import Debug from 'debug';
 
+import { shouldSkipAutoPlugin } from '../getAutolinkedPackages';
 import { withAndroidIcons } from './icons/withAndroidIcons';
 import { withIosIcons } from './icons/withIosIcons';
+import { withSdk52ReactNative77CompatAndroid } from './sdk52/ReactNative77CompatPlugin';
+import { withSdk52ReactNative78CompatAndroid } from './sdk52/ReactNative78CompatPlugin';
 import withAdMob from './unversioned/expo-ads-admob/expo-ads-admob';
 import withAppleAuthentication from './unversioned/expo-apple-authentication';
 import withContacts from './unversioned/expo-contacts';
 import withDocumentPicker from './unversioned/expo-document-picker';
 import withNavigationBar from './unversioned/expo-navigation-bar/expo-navigation-bar';
-import withNotifications from './unversioned/expo-notifications/expo-notifications';
 import withSplashScreen from './unversioned/expo-splash-screen/expo-splash-screen';
 import withSystemUI from './unversioned/expo-system-ui/expo-system-ui';
 import withUpdates from './unversioned/expo-updates';
+import withEdgeToEdge from './unversioned/react-native-edge-to-edge/withEdgeToEdge';
 import withMaps from './unversioned/react-native-maps';
-import { shouldSkipAutoPlugin } from '../getAutolinkedPackages';
 
 const debug = Debug('expo:prebuild-config');
 
@@ -41,8 +43,6 @@ export const withIosExpoPlugins: ConfigPlugin<{
 
   return withPlugins(config, [
     [IOSConfig.BundleIdentifier.withBundleIdentifier, { bundleIdentifier }],
-    IOSConfig.Swift.withSwiftBridgingHeader,
-    IOSConfig.Swift.withNoopSwiftFile,
     IOSConfig.Google.withGoogle,
     IOSConfig.Name.withDisplayName,
     IOSConfig.Name.withProductName,
@@ -54,14 +54,17 @@ export const withIosExpoPlugins: ConfigPlugin<{
     IOSConfig.Version.withVersion,
     IOSConfig.Google.withGoogleServicesFile,
     IOSConfig.BuildProperties.withJsEnginePodfileProps,
+    IOSConfig.BuildProperties.withNewArchEnabledPodfileProps,
     // Entitlements
     IOSConfig.Entitlements.withAssociatedDomains,
     // XcodeProject
     IOSConfig.DeviceFamily.withDeviceFamily,
     IOSConfig.Bitcode.withBitcode,
     IOSConfig.Locales.withLocales,
+    IOSConfig.DevelopmentTeam.withDevelopmentTeam,
     // Dangerous
     withIosIcons,
+    IOSConfig.PrivacyInfo.withPrivacyInfo,
   ]);
 };
 
@@ -71,14 +74,15 @@ export const withIosExpoPlugins: ConfigPlugin<{
  */
 export const withAndroidExpoPlugins: ConfigPlugin<{
   package: string;
+  projectRoot: string;
 }> = (config, props) => {
   // Set the package name ahead of time.
   if (!config.android) config.android = {};
   config.android.package = props.package;
-
   return withPlugins(config, [
     // gradle.properties
     AndroidConfig.BuildProperties.withJsEngineGradleProps,
+    AndroidConfig.BuildProperties.withNewArchEnabledGradleProps,
 
     // settings.gradle
     AndroidConfig.Name.withNameSettingsGradle,
@@ -107,10 +111,13 @@ export const withAndroidExpoPlugins: ConfigPlugin<{
 
     // Dangerous -- these plugins run in reverse order.
     AndroidConfig.GoogleServices.withGoogleServicesFile,
+    withSdk52ReactNative77CompatAndroid,
+    withSdk52ReactNative78CompatAndroid,
 
     // Modify colors.xml and styles.xml
     AndroidConfig.StatusBar.withStatusBar,
     AndroidConfig.PrimaryColor.withPrimaryColor,
+    (config) => withEdgeToEdge(config, props),
 
     withAndroidIcons,
     // If we renamed the package, we should also move it around and rename it in source files
@@ -125,7 +132,6 @@ const versionedExpoSDKPackages: string[] = [
   'expo-ads-admob',
   'expo-apple-authentication',
   'expo-contacts',
-  'expo-notifications',
   'expo-updates',
   'expo-navigation-bar',
   'expo-document-picker',
@@ -139,7 +145,6 @@ export const withVersionedExpoSDKPlugins: ConfigPlugin = (config) => {
     withAdMob,
     withAppleAuthentication,
     withContacts,
-    withNotifications,
     withUpdates,
     withDocumentPicker,
     // System UI must come before splash screen as they overlap
@@ -164,7 +169,6 @@ const legacyExpoPlugins = [
   'expo-app-auth',
   'expo-av',
   'expo-background-fetch',
-  'expo-barcode-scanner',
   'expo-brightness',
   'expo-calendar',
   'expo-camera',

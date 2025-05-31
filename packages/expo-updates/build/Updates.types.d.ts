@@ -93,14 +93,6 @@ export type UpdateCheckResultNotAvailable = {
  */
 export type UpdateCheckResult = UpdateCheckResultRollBack | UpdateCheckResultAvailable | UpdateCheckResultNotAvailable;
 /**
- * @deprecated
- */
-export type UpdateCheckResultSuccess = UpdateCheckResultAvailable;
-/**
- * @deprecated
- */
-export type UpdateCheckResultFailure = UpdateCheckResultNotAvailable;
-/**
  * The successful result of fetching a new update.
  */
 export type UpdateFetchResultSuccess = {
@@ -159,7 +151,7 @@ export type UpdateFetchResultRollBackToEmbedded = {
  */
 export type UpdateFetchResult = UpdateFetchResultSuccess | UpdateFetchResultFailure | UpdateFetchResultRollBackToEmbedded;
 /**
- * An object representing a single log entry from expo-updates logging on the client.
+ * An object representing a single log entry from `expo-updates` logging on the client.
  */
 export type UpdatesLogEntry = {
     /**
@@ -192,7 +184,7 @@ export type UpdatesLogEntry = {
     stacktrace?: string[];
 };
 /**
- * The possible code values for expo-updates log entries
+ * The possible code values for `expo-updates` log entries
  */
 export declare enum UpdatesLogEntryCode {
     NONE = "None",
@@ -208,7 +200,7 @@ export declare enum UpdatesLogEntryCode {
     UNKNOWN = "Unknown"
 }
 /**
- * The possible log levels for expo-updates log entries
+ * The possible log levels for `expo-updates` log entries
  */
 export declare enum UpdatesLogEntryLevel {
     TRACE = "trace",
@@ -219,7 +211,7 @@ export declare enum UpdatesLogEntryLevel {
     FATAL = "fatal"
 }
 /**
- * The possible settings that determine if expo-updates will check for updates on app startup.
+ * The possible settings that determine if `expo-updates` will check for updates on app startup.
  * By default, Expo will check for updates every time the app is loaded.
  * Set this to `ON_ERROR_RECOVERY` to disable automatic checking unless recovering from an error.
  * Set this to `NEVER` to completely disable automatic checking.
@@ -253,20 +245,25 @@ export type UpdatesNativeStateRollback = {
     commitTime: string;
 };
 /**
+ * The native state machine context, either read directly from a native module method,
+ * or received in a state change event. Used internally by this module and not exported publicly.
  * @hidden
  */
 export type UpdatesNativeStateMachineContext = {
+    isStartupProcedureRunning: boolean;
     isUpdateAvailable: boolean;
     isUpdatePending: boolean;
     isChecking: boolean;
     isDownloading: boolean;
     isRestarting: boolean;
+    restartCount: number;
     latestManifest?: Manifest;
     downloadedManifest?: Manifest;
     rollback?: UpdatesNativeStateRollback;
     checkError?: Error;
     downloadError?: Error;
     lastCheckForUpdateTime?: Date;
+    sequenceNumber: number;
 };
 /**
  * @hidden

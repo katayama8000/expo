@@ -10,6 +10,101 @@
 
 ### 💡 Others
 
+## 15.1.5 — 2025-04-30
+
+_This version does not introduce any user-facing changes._
+
+## 15.1.4 — 2025-04-25
+
+_This version does not introduce any user-facing changes._
+
+## 15.1.3 — 2025-04-21
+
+_This version does not introduce any user-facing changes._
+
+## 15.1.2 — 2025-04-14
+
+_This version does not introduce any user-facing changes._
+
+## 15.1.1 — 2025-04-09
+
+_This version does not introduce any user-facing changes._
+
+## 15.1.0 — 2025-04-04
+
+### 🛠 Breaking changes
+
+- upgrade RN to 0.78 ([#35050](https://github.com/expo/expo/pull/35050) by [@vonovak](https://github.com/vonovak))
+
+### 🐛 Bug fixes
+
+- stb_image PNG: Checks for invalid DEFLATE codes. ([#35184](https://github.com/expo/expo/pull/35184) by [@manoj23](https://github.com/manoj23))
+
+### 💡 Others
+
+- [Android] Started using expo modules gradle plugin. ([#34176](https://github.com/expo/expo/pull/34176) by [@lukmccall](https://github.com/lukmccall))
+- [apple] Migrate remaining `expo-module.config.json` to unified platform syntax. ([#34445](https://github.com/expo/expo/pull/34445) by [@reichhartd](https://github.com/reichhartd))
+
+## 15.0.5 - 2025-04-01
+
+### 🐛 Bug fixes
+
+- [ios] Fixed build errors in XCode 16.3 ([#35811](https://github.com/expo/expo/pull/35811) by [@chrfalch](https://github.com/chrfalch))
+
+## 15.0.4 - 2025-01-19
+
+_This version does not introduce any user-facing changes._
+
+## 15.0.3 - 2025-01-10
+
+_This version does not introduce any user-facing changes._
+
+## 15.0.2 — 2024-11-14
+
+_This version does not introduce any user-facing changes._
+
+## 15.0.1 — 2024-11-07
+
+### 🐛 Bug fixes
+
+- Converted the native view from Objective-C to Swift to fix support for the New Architecture. ([#32675](https://github.com/expo/expo/pull/32675) by [@tsapeta](https://github.com/tsapeta))
+
+## 15.0.0 — 2024-10-22
+
+### 🛠 Breaking changes
+
+- Bumped iOS deployment target to 15.1. ([#30840](https://github.com/expo/expo/pull/30840) by [@tsapeta](https://github.com/tsapeta))
+
+### 🐛 Bug fixes
+
+- Add NULL check before releasing `textureRef` in `EXGLCameraObject`. ([#29092](https://github.com/expo/expo/pull/29092) by [@hakonk](https://github.com/hakonk))
+- Add missing `react` and `react-native` peer dependencies for isolated modules. ([#30468](https://github.com/expo/expo/pull/30468) by [@byCedric](https://github.com/byCedric))
+- Add missing `react-native-web` optional peer dependency for isolated modules. ([#30689](https://github.com/expo/expo/pull/30689) by [@byCedric](https://github.com/byCedric))
+
+### 💡 Others
+
+- Enabled support on web on iOS. ([#31479](https://github.com/expo/expo/pull/31479) by [@fobos531](https://github.com/fobos531))
+
+### ⚠️ Notices
+
+- Added support for React Native 0.75.x. ([#30034](https://github.com/expo/expo/pull/30034), [#30828](https://github.com/expo/expo/pull/30828) by [@gabrieldonadel](https://github.com/gabrieldonadel))
+
+## 14.0.2 — 2024-04-24
+
+### 🐛 Bug fixes
+
+- Fixed integration with `react-native-reanimated`. ([#28414](https://github.com/expo/expo/pull/28414) by [@lukmccall](https://github.com/lukmccall))
+
+## 14.0.1 — 2024-04-23
+
+_This version does not introduce any user-facing changes._
+
+## 14.0.0 — 2024-04-18
+
+### 💡 Others
+
+- Removed deprecated backward compatible Gradle settings. ([#28083](https://github.com/expo/expo/pull/28083) by [@kudo](https://github.com/kudo))
+
 ## 13.6.0 — 2023-12-12
 
 ### 💡 Others

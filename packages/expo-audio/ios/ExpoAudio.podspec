@@ -10,7 +10,10 @@ Pod::Spec.new do |s|
   s.license        = package['license']
   s.author         = package['author']
   s.homepage       = package['homepage']
-  s.platform       = :ios, '13.4'
+  s.platforms = {
+    :ios => '15.1',
+    :tvos => '15.1'
+  }
   s.swift_version  = '5.4'
   s.source         = { git: 'https://github.com/expo/expo.git' }
   s.static_framework = true
@@ -19,7 +22,11 @@ Pod::Spec.new do |s|
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule'
   }
   
   s.source_files = "**/*.{h,m,swift}"
+  s.tvos.exclude_files = "**/AudioRecorder.swift",
+                         "**/AudioRecordingRequester.swift",
+                         "**/RecordingDelegate.swift"
 end

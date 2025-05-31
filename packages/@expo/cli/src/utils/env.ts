@@ -1,4 +1,5 @@
 import { boolish, int, string } from 'getenv';
+import process from 'node:process';
 
 // @expo/webpack-config -> expo-pwa -> @expo/image-utils: EXPO_IMAGE_UTILS_NO_SHARP
 
@@ -99,11 +100,6 @@ class Env {
     return string('EXPO_EDITOR', '');
   }
 
-  /** Enable auto server root detection for Metro. This will change the server root to the workspace root. */
-  get EXPO_USE_METRO_WORKSPACE_ROOT(): boolean {
-    return boolish('EXPO_USE_METRO_WORKSPACE_ROOT', false);
-  }
-
   /**
    * Overwrite the dev server URL, disregarding the `--port`, `--host`, `--tunnel`, `--lan`, `--localhost` arguments.
    * This is useful for browser editors that require custom proxy URLs.
@@ -175,15 +171,103 @@ class Env {
     return boolish('EXPO_NO_CLIENT_ENV_VARS', false);
   }
 
-  /** Enable the React Native JS Inspector, instead of the "classic" Chrome DevTools (SDK <=49) */
-  get EXPO_USE_UNSTABLE_DEBUGGER(): boolean {
-    return boolish('EXPO_USE_UNSTABLE_DEBUGGER', false);
-  }
-
   /** Set the default `user` that should be passed to `--user` with ADB commands. Used for installing APKs on Android devices with multiple profiles. Defaults to `0`. */
   get EXPO_ADB_USER(): string {
     return string('EXPO_ADB_USER', '0');
   }
+
+  /** Used internally to enable E2E utilities. This behavior is not stable to external users. */
+  get __EXPO_E2E_TEST(): boolean {
+    return boolish('__EXPO_E2E_TEST', false);
+  }
+
+  /** Unstable: Force single-bundle exports in production. */
+  get EXPO_NO_BUNDLE_SPLITTING(): boolean {
+    return boolish('EXPO_NO_BUNDLE_SPLITTING', false);
+  }
+
+  /**
+   * Enable Atlas to gather bundle information during development or export.
+   * Note, because this used to be an experimental feature, both `EXPO_ATLAS` and `EXPO_UNSTABLE_ATLAS` are supported.
+   */
+  get EXPO_ATLAS() {
+    return boolish('EXPO_ATLAS', boolish('EXPO_UNSTABLE_ATLAS', false));
+  }
+
+  /** Unstable: Enable tree shaking for Metro. */
+  get EXPO_UNSTABLE_TREE_SHAKING() {
+    return boolish('EXPO_UNSTABLE_TREE_SHAKING', false);
+  }
+
+  /** Unstable: Enable eager bundling where transformation runs uncached after the entire bundle has been created. This is required for production tree shaking and less optimized for development bundling. */
+  get EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH() {
+    return boolish('EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH', false);
+  }
+
+  /** Enable the use of Expo's custom metro require implementation. The custom require supports better debugging, tree shaking, and React Server Components. */
+  get EXPO_USE_METRO_REQUIRE() {
+    return boolish('EXPO_USE_METRO_REQUIRE', false);
+  }
+
+  /** Internal key used to pass eager bundle data from the CLI to the native run scripts during `npx expo run` commands. */
+  get __EXPO_EAGER_BUNDLE_OPTIONS() {
+    return string('__EXPO_EAGER_BUNDLE_OPTIONS', '');
+  }
+
+  /** Disable server deployment during production builds (during `expo export:embed`). This is useful for testing API routes and server components against a local server. */
+  get EXPO_NO_DEPLOY(): boolean {
+    return boolish('EXPO_NO_DEPLOY', false);
+  }
+
+  /** Enable hydration during development when rendering Expo Web */
+  get EXPO_WEB_DEV_HYDRATE(): boolean {
+    return boolish('EXPO_WEB_DEV_HYDRATE', false);
+  }
+
+  /** Enable experimental React Server Functions support. */
+  get EXPO_UNSTABLE_SERVER_FUNCTIONS(): boolean {
+    return boolish('EXPO_UNSTABLE_SERVER_FUNCTIONS', false);
+  }
+
+  /** Enable unstable/experimental mode where React Native Web isn't required to run Expo apps on web. */
+  get EXPO_NO_REACT_NATIVE_WEB(): boolean {
+    return boolish('EXPO_NO_REACT_NATIVE_WEB', false);
+  }
+
+  /** Enable unstable/experimental support for deploying the native server in `npx expo run` commands. */
+  get EXPO_UNSTABLE_DEPLOY_SERVER(): boolean {
+    return boolish('EXPO_UNSTABLE_DEPLOY_SERVER', false);
+  }
+
+  /** Is running in EAS Build. This is set by EAS: https://docs.expo.dev/eas/environment-variables/ */
+  get EAS_BUILD(): boolean {
+    return boolish('EAS_BUILD', false);
+  }
+
+  /** Disable the React Native Directory compatibility check for new architecture when installing packages */
+  get EXPO_NO_NEW_ARCH_COMPAT_CHECK(): boolean {
+    return boolish('EXPO_NO_NEW_ARCH_COMPAT_CHECK', false);
+  }
+
+  /** Disable the dependency validation when installing other dependencies and starting the project */
+  get EXPO_NO_DEPENDENCY_VALIDATION(): boolean {
+    // Default to disabling when running in a web container (stackblitz, bolt, etc).
+    const isWebContainer = process.versions.webcontainer != null;
+    return boolish('EXPO_NO_DEPENDENCY_VALIDATION', isWebContainer);
+  }
+
+  /** Force Expo CLI to run in webcontainer mode, this has impact on which URL Expo is using by default */
+  get EXPO_FORCE_WEBCONTAINER_ENV(): boolean {
+    return boolish('EXPO_FORCE_WEBCONTAINER_ENV', false);
+  }
 }
 
 export const env = new Env();
+
+export function envIsWebcontainer() {
+  // See: https://github.com/unjs/std-env/blob/4b1e03c4efce58249858efc2cc5f5eac727d0adb/src/providers.ts#L134-L143
+  return (
+    env.EXPO_FORCE_WEBCONTAINER_ENV ||
+    (process.env.SHELL === '/bin/jsh' && !!process.versions.webcontainer)
+  );
+}

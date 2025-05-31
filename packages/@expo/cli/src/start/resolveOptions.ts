@@ -1,9 +1,9 @@
 import assert from 'assert';
 import chalk from 'chalk';
 
-import { canResolveDevClient } from './detectDevClient';
+import { canResolveDevClient, hasDirectDevClientDependency } from './detectDevClient';
 import { Log } from '../log';
-import { hasDirectDevClientDependency } from '../utils/analytics/getDevClientProperties';
+import { envIsWebcontainer } from '../utils/env';
 import { AbortCommandError, CommandError } from '../utils/errors';
 import { resolvePortAsync } from '../utils/port';
 
@@ -36,6 +36,10 @@ export async function resolveOptionsAsync(projectRoot: string, args: any): Promi
     localhost: args['--localhost'],
     tunnel: args['--tunnel'],
   });
+
+  if (args['--https']) {
+    Log.warn(chalk`{bold --https} option is deprecated in favor of {bold --tunnel}`);
+  }
 
   // User can force the default target by passing either `--dev-client` or `--go`. They can also
   // swap between them during development by pressing `s`.
@@ -143,6 +147,12 @@ export function resolveHostType(options: {
   } else if (options.localhost) {
     return 'localhost';
   }
+
+  // If no option is provided, and we are running in Stackblitz, enable tunnel by default
+  if (envIsWebcontainer()) {
+    return 'tunnel';
+  }
+
   return 'lan';
 }
 

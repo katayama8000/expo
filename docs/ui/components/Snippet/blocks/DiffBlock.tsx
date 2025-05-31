@@ -1,13 +1,15 @@
-import { Copy07Icon } from '@expo/styleguide-icons';
+import { ArrowUpRightIcon } from '@expo/styleguide-icons/outline/ArrowUpRightIcon';
+import { Copy07Icon } from '@expo/styleguide-icons/outline/Copy07Icon';
 import { useEffect, useState, PropsWithChildren } from 'react';
 import { parseDiff, Diff, Hunk } from 'react-diff-view';
 
+import { SettingsAction } from '~/ui/components/Snippet/actions/SettingsAction';
+
 import { PermalinkedSnippetHeader } from '../PermalinkedSnippetHeader';
 import { Snippet } from '../Snippet';
+import { SnippetAction } from '../SnippetAction';
 import { SnippetContent } from '../SnippetContent';
 import { SnippetHeader } from '../SnippetHeader';
-
-import { SettingsAction } from '~/ui/components/Snippet/actions/SettingsAction';
 
 const randomCommitHash = () => Math.random().toString(36).slice(2, 9);
 
@@ -25,6 +27,7 @@ type Props = PropsWithChildren<{
   source?: string;
   raw?: string;
   filenameModifier?: (filename: string) => string;
+  filenameToLinkUrl?: (filename: string) => string;
   showOperation?: boolean;
   collapseDeletedFiles?: boolean;
   SnippetHeaderComponent?: typeof SnippetHeader | typeof PermalinkedSnippetHeader;
@@ -34,6 +37,7 @@ export const DiffBlock = ({
   source,
   raw,
   filenameModifier = str => str,
+  filenameToLinkUrl,
   showOperation = false,
   collapseDeletedFiles = false,
   SnippetHeaderComponent = SnippetHeader,
@@ -47,7 +51,7 @@ export const DiffBlock = ({
         setDiff(parseDiff(result));
       };
 
-      fetchDiffAsync();
+      void fetchDiffAsync();
     }
   }, [source]);
 
@@ -65,7 +69,7 @@ export const DiffBlock = ({
   }: RenderLine) => {
     // older SDK template-bare-minimum files (e.g, 46) generate a diff with no hunks and no paths
     // one example of this was a change to gradle-wrapper.jar
-    if (!hunks.length) {
+    if (hunks.length === 0) {
       return null;
     }
     return (
@@ -76,6 +80,15 @@ export const DiffBlock = ({
           operationType={type}
           showOperation={showOperation}
           float={collapseDeletedFiles && type === 'delete'}>
+          {newPath && filenameToLinkUrl && type !== 'delete' ? (
+            <SnippetAction
+              rightSlot={<ArrowUpRightIcon className="icon-sm shrink-0 text-icon-secondary" />}
+              onClick={() => {
+                window.open(filenameToLinkUrl(newPath), '_blank');
+              }}>
+              Raw
+            </SnippetAction>
+          ) : null}
           <SettingsAction />
         </SnippetHeaderComponent>
         {!collapseDeletedFiles || type !== 'delete' ? (

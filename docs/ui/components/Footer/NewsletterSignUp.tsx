@@ -1,5 +1,5 @@
 import { Button, mergeClasses } from '@expo/styleguide';
-import { Mail01Icon } from '@expo/styleguide-icons';
+import { Mail01Icon } from '@expo/styleguide-icons/outline/Mail01Icon';
 import { useState } from 'react';
 
 import { Input } from '~/ui/components/Form';
@@ -39,10 +39,10 @@ export const NewsletterSignUp = () => {
   }
 
   return (
-    <div className="flex-1 max-w-[350px] max-md-gutters:max-w-full">
-      <CALLOUT theme="secondary" weight="medium" className="flex gap-2 items-center">
-        <Mail01Icon className="text-icon-tertiary shrink-0" />
-        Sign up for the Expo's Newsletter
+    <div className="max-w-[350px] flex-1 max-md-gutters:max-w-full">
+      <CALLOUT className="flex items-center gap-2 font-medium text-secondary" id="newsletter-label">
+        <Mail01Icon className="shrink-0 text-icon-tertiary" />
+        Sign up for the Expo Newsletter
       </CALLOUT>
       <form
         className="relative"
@@ -51,7 +51,7 @@ export const NewsletterSignUp = () => {
           signUp();
         }}>
         {userSignedUp ? (
-          <LABEL className="flex items-center my-2.5 h-12">Thank you for the sign up! 💙</LABEL>
+          <LABEL className="my-2.5 flex h-12 items-center">Thank you for the sign up! 💙</LABEL>
         ) : (
           <Input
             onChange={event => {
@@ -64,6 +64,7 @@ export const NewsletterSignUp = () => {
             className={mergeClasses('pr-[68px]', error && 'border-danger text-danger')}
             type="email"
             placeholder="reader@email.com"
+            aria-labelledby="newsletter-label"
           />
         )}
         {!userSignedUp ? (
@@ -71,13 +72,13 @@ export const NewsletterSignUp = () => {
             size="xs"
             theme={userSignedUp ? 'quaternary' : 'secondary'}
             className="absolute right-2.5 top-2 min-w-[68px]"
-            disabled={userSignedUp || !email.length}
+            disabled={userSignedUp || email.length === 0}
             onClick={signUp}>
             {userSignedUp ? 'Done!' : 'Sign Up'}
           </Button>
         ) : null}
       </form>
-      <FOOTNOTE theme="secondary">
+      <FOOTNOTE theme="tertiary">
         Unsubscribe at any time. Read our{' '}
         <A href="https://expo.dev/privacy" openInNewTab>
           privacy policy

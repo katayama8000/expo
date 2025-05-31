@@ -6,7 +6,6 @@ import android.view.View
 import com.facebook.react.bridge.Dynamic
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
-import expo.modules.annotation.Config
 import expo.modules.core.arguments.ReadableArguments
 import expo.modules.kotlin.apifeatures.EitherType
 import expo.modules.kotlin.exception.MissingTypeConverter
@@ -19,6 +18,8 @@ import expo.modules.kotlin.records.Record
 import expo.modules.kotlin.records.RecordTypeConverter
 import expo.modules.kotlin.sharedobjects.SharedObject
 import expo.modules.kotlin.sharedobjects.SharedObjectTypeConverter
+import expo.modules.kotlin.sharedobjects.SharedRef
+import expo.modules.kotlin.sharedobjects.SharedRefTypeConverter
 import expo.modules.kotlin.typedarray.BigInt64Array
 import expo.modules.kotlin.typedarray.BigUint64Array
 import expo.modules.kotlin.typedarray.Float32Array
@@ -45,6 +46,7 @@ import java.time.LocalDate
 import kotlin.reflect.KClass
 import kotlin.reflect.KType
 import kotlin.reflect.typeOf
+import kotlin.time.Duration
 
 interface TypeConverterProvider {
   fun obtainTypeConverter(type: KType): TypeConverter<*>
@@ -71,21 +73,24 @@ fun convert(value: Dynamic, type: KType): Any? {
 }
 
 object TypeConverterProviderImpl : TypeConverterProvider {
-  private val cachedConverters = createCachedConverters(false)
-  private val nullableCachedConverters = createCachedConverters(true)
+  private val cachedConverters = createCachedConverters()
 
-  private val cachedRecordConverters = mutableMapOf<KClass<*>, TypeConverter<*>>()
-  private val cachedCustomConverters = mutableMapOf<KType, TypeConverter<*>>()
+  private val cachedRecordConverters = mutableMapOf<KType, TypeConverter<*>>()
 
   private fun getCachedConverter(inputType: KType): TypeConverter<*>? {
-    return if (inputType.isMarkedNullable) {
-      nullableCachedConverters[inputType.classifier]
-    } else {
-      cachedConverters[inputType.classifier]
-    }
+    return cachedConverters[inputType.classifier]
   }
 
   override fun obtainTypeConverter(type: KType): TypeConverter<*> {
+    val nonNullableTypeConverter = obtainNonNullableTypeConverter(type)
+    return if (type.isMarkedNullable) {
+      NullableTypeConverter(nonNullableTypeConverter)
+    } else {
+      nonNullableTypeConverter
+    }
+  }
+
+  fun obtainNonNullableTypeConverter(type: KType): TypeConverter<*> {
     getCachedConverter(type)?.let {
       return it
     }
@@ -115,22 +120,26 @@ object TypeConverterProviderImpl : TypeConverterProvider {
 
     if (jClass.isEnum) {
       @Suppress("UNCHECKED_CAST")
-      return EnumTypeConverter(kClass as KClass<Enum<*>>, type.isMarkedNullable)
+      return EnumTypeConverter(kClass as KClass<Enum<*>>)
     }
 
-    val cachedConverter = cachedRecordConverters[kClass]
+    val cachedConverter = cachedRecordConverters[type]
     if (cachedConverter != null) {
       return cachedConverter
     }
 
     if (Record::class.java.isAssignableFrom(jClass)) {
       val converter = RecordTypeConverter<Record>(this, type)
-      cachedRecordConverters[kClass] = converter
+      cachedRecordConverters[type] = converter
       return converter
     }
 
     if (View::class.java.isAssignableFrom(jClass)) {
       return ViewTypeConverter<View>(type)
+    }
+
+    if (SharedRef::class.java.isAssignableFrom(jClass)) {
+      return SharedRefTypeConverter<SharedRef<*>>(type)
     }
 
     if (SharedObject::class.java.isAssignableFrom(jClass)) {
@@ -142,7 +151,6 @@ object TypeConverterProviderImpl : TypeConverterProvider {
     }
 
     return handelEither(type, jClass)
-      ?: handelCustomConverter(type, kClass)
       ?: throw MissingTypeConverter(type)
   }
 
@@ -161,48 +169,20 @@ object TypeConverterProviderImpl : TypeConverterProvider {
     return null
   }
 
-  private fun handelCustomConverter(type: KType, kClass: KClass<*>): TypeConverter<*>? {
-    val cachedConverter = cachedCustomConverters[type]
-    if (cachedConverter != null) {
-      return cachedConverter
-    }
-
-    val typeName = kClass.java.canonicalName ?: return null
-
-    val converterProviderName = "${Config.packageNamePrefix}$typeName${Config.classNameSuffix}"
-    return try {
-      val converterClazz = Class.forName(converterProviderName)
-      val converterProvider = converterClazz.newInstance()
-      val method = converterProvider.javaClass.getMethod(Config.converterProviderFunctionName, KType::class.java)
-
-      (method.invoke(converterProvider, type) as TypeConverter<*>)
-        .also {
-          cachedCustomConverters[type] = it
-        }
-    } catch (e: Throwable) {
-      null
-    }
-  }
-
-  private fun createCachedConverters(isOptional: Boolean): Map<KClass<*>, TypeConverter<*>> {
+  private fun createCachedConverters(): Map<KClass<*>, TypeConverter<*>> {
     val intTypeConverter = createTrivialTypeConverter(
-      isOptional,
       ExpectedType(CppType.INT)
     ) { it.asDouble().toInt() }
     val longTypeConverter = createTrivialTypeConverter(
-      isOptional,
       ExpectedType(CppType.LONG)
     ) { it.asDouble().toLong() }
     val doubleTypeConverter = createTrivialTypeConverter(
-      isOptional,
       ExpectedType(CppType.DOUBLE)
     ) { it.asDouble() }
     val floatTypeConverter = createTrivialTypeConverter(
-      isOptional,
       ExpectedType(CppType.FLOAT)
     ) { it.asDouble().toFloat() }
     val boolTypeConverter = createTrivialTypeConverter(
-      isOptional,
       ExpectedType(CppType.BOOLEAN)
     ) { it.asBoolean() }
 
@@ -223,26 +203,34 @@ object TypeConverterProviderImpl : TypeConverterProvider {
       java.lang.Boolean::class to boolTypeConverter,
 
       String::class to createTrivialTypeConverter(
-        isOptional, ExpectedType(CppType.STRING)
+        ExpectedType(CppType.STRING)
       ) { it.asString() },
 
       ReadableArray::class to createTrivialTypeConverter(
-        isOptional, ExpectedType(CppType.READABLE_ARRAY)
+        ExpectedType(CppType.READABLE_ARRAY)
       ) { it.asArray() },
       ReadableMap::class to createTrivialTypeConverter(
-        isOptional, ExpectedType(CppType.READABLE_MAP)
+        ExpectedType(CppType.READABLE_MAP)
       ) { it.asMap() },
 
       IntArray::class to createTrivialTypeConverter(
-        isOptional, ExpectedType.forPrimitiveArray(CppType.INT)
+        ExpectedType.forPrimitiveArray(CppType.INT)
       ) {
         val jsArray = it.asArray()
         IntArray(jsArray.size()) { index ->
           jsArray.getInt(index)
         }
       },
+      LongArray::class to createTrivialTypeConverter(
+        ExpectedType.forPrimitiveArray(CppType.LONG)
+      ) {
+        val jsArray = it.asArray()
+        LongArray(jsArray.size()) { index ->
+          jsArray.getDouble(index).toLong()
+        }
+      },
       DoubleArray::class to createTrivialTypeConverter(
-        isOptional, ExpectedType.forPrimitiveArray(CppType.DOUBLE)
+        ExpectedType.forPrimitiveArray(CppType.DOUBLE)
       ) {
         val jsArray = it.asArray()
         DoubleArray(jsArray.size()) { index ->
@@ -250,7 +238,7 @@ object TypeConverterProviderImpl : TypeConverterProvider {
         }
       },
       FloatArray::class to createTrivialTypeConverter(
-        isOptional, ExpectedType.forPrimitiveArray(CppType.FLOAT)
+        ExpectedType.forPrimitiveArray(CppType.FLOAT)
       ) {
         val jsArray = it.asArray()
         FloatArray(jsArray.size()) { index ->
@@ -258,58 +246,84 @@ object TypeConverterProviderImpl : TypeConverterProvider {
         }
       },
       BooleanArray::class to createTrivialTypeConverter(
-        isOptional, ExpectedType.forPrimitiveArray(CppType.BOOLEAN)
+        ExpectedType.forPrimitiveArray(CppType.BOOLEAN)
       ) {
         val jsArray = it.asArray()
         BooleanArray(jsArray.size()) { index ->
           jsArray.getBoolean(index)
         }
       },
-      ByteArray::class to ByteArrayTypeConverter(isOptional),
+      ByteArray::class to ByteArrayTypeConverter(),
 
       JavaScriptValue::class to createTrivialTypeConverter(
-        isOptional, ExpectedType(CppType.JS_VALUE)
+        ExpectedType(CppType.JS_VALUE)
       ),
       JavaScriptObject::class to createTrivialTypeConverter(
-        isOptional, ExpectedType(CppType.JS_OBJECT)
+        ExpectedType(CppType.JS_OBJECT)
       ),
 
-      Int8Array::class to Int8ArrayTypeConverter(isOptional),
-      Int16Array::class to Int16ArrayTypeConverter(isOptional),
-      Int32Array::class to Int32ArrayTypeConverter(isOptional),
-      Uint8Array::class to Uint8ArrayTypeConverter(isOptional),
-      Uint8ClampedArray::class to Uint8ClampedArrayTypeConverter(isOptional),
-      Uint16Array::class to Uint16ArrayTypeConverter(isOptional),
-      Uint32Array::class to Uint32ArrayTypeConverter(isOptional),
-      Float32Array::class to Float32ArrayTypeConverter(isOptional),
-      Float64Array::class to Float64ArrayTypeConverter(isOptional),
-      BigInt64Array::class to BigInt64ArrayTypeConverter(isOptional),
-      BigUint64Array::class to BigUint64ArrayTypeConverter(isOptional),
-      TypedArray::class to TypedArrayTypeConverter(isOptional),
+      Int8Array::class to Int8ArrayTypeConverter(),
+      Int16Array::class to Int16ArrayTypeConverter(),
+      Int32Array::class to Int32ArrayTypeConverter(),
+      Uint8Array::class to Uint8ArrayTypeConverter(),
+      Uint8ClampedArray::class to Uint8ClampedArrayTypeConverter(),
+      Uint16Array::class to Uint16ArrayTypeConverter(),
+      Uint32Array::class to Uint32ArrayTypeConverter(),
+      Float32Array::class to Float32ArrayTypeConverter(),
+      Float64Array::class to Float64ArrayTypeConverter(),
+      BigInt64Array::class to BigInt64ArrayTypeConverter(),
+      BigUint64Array::class to BigUint64ArrayTypeConverter(),
+      TypedArray::class to TypedArrayTypeConverter(),
 
-      URL::class to URLTypConverter(isOptional),
-      Uri::class to UriTypeConverter(isOptional),
-      URI::class to JavaURITypeConverter(isOptional),
+      URL::class to URLTypConverter(),
+      Uri::class to UriTypeConverter(),
+      URI::class to JavaURITypeConverter(),
 
-      File::class to FileTypeConverter(isOptional),
+      File::class to FileTypeConverter(),
 
-      Any::class to AnyTypeConverter(isOptional),
+      Duration::class to DurationTypeConverter(),
+
+      Any::class to AnyTypeConverter(),
 
       // Unit converter doesn't care about nullability.
       // It will always return Unit
       Unit::class to UnitTypeConverter(),
 
-      ReadableArguments::class to ReadableArgumentsTypeConverter(isOptional)
+      ReadableArguments::class to ReadableArgumentsTypeConverter()
     )
 
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
       return converters + mapOf(
-        Path::class to PathTypeConverter(isOptional),
-        Color::class to ColorTypeConverter(isOptional),
-        LocalDate::class to DateTypeConverter(isOptional)
+        Path::class to PathTypeConverter(),
+        Color::class to ColorTypeConverter(),
+        LocalDate::class to DateTypeConverter()
       )
     }
 
     return converters
   }
+}
+
+class MergedTypeConverterProvider(
+  private val providers: List<TypeConverterProvider>
+) : TypeConverterProvider {
+  override fun obtainTypeConverter(type: KType): TypeConverter<*> {
+    for (provider in providers) {
+      try {
+        return provider.obtainTypeConverter(type)
+      } catch (_: MissingTypeConverter) {
+        // Ignore and try next provider
+      }
+    }
+
+    throw MissingTypeConverter(type)
+  }
+}
+
+fun TypeConverterProvider.mergeWith(otherProvider: TypeConverterProvider): TypeConverterProvider {
+  return MergedTypeConverterProvider(listOf(this, otherProvider))
+}
+
+fun TypeConverterProvider?.mergeWithDefault(): TypeConverterProvider {
+  return this?.mergeWith(TypeConverterProviderImpl) ?: TypeConverterProviderImpl
 }

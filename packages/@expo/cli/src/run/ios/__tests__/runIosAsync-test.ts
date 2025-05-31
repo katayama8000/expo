@@ -54,6 +54,7 @@ jest.mock('../XcodeBuild', () => ({
 
 jest.mock('../launchApp', () => ({
   launchAppAsync: jest.fn(async () => {}),
+  getLaunchInfoForBinaryAsync: jest.fn(async () => ({})),
 }));
 
 const mockPlatform = (value: typeof process.platform) =>
@@ -78,7 +79,16 @@ describe(resolveOptionsAsync, () => {
 
   it(`runs ios on simulator`, async () => {
     mockPlatform('darwin');
-    vol.fromJSON(rnFixture, '/');
+    vol.fromJSON(
+      {
+        ...rnFixture,
+        '/package.json': JSON.stringify({}),
+        'node_modules/expo/package.json': JSON.stringify({
+          version: '53.0.0',
+        }),
+      },
+      '/'
+    );
 
     await runIosAsync('/', {});
 
@@ -95,11 +105,16 @@ describe(resolveOptionsAsync, () => {
       xcodeProject: { isWorkspace: false, name: '/ios/ReactNativeProject.xcodeproj' },
     });
 
-    expect(launchAppAsync).toBeCalledWith('/mock_binary', expect.anything(), {
-      device: { name: 'mock', udid: '123' },
-      isSimulator: true,
-      shouldStartBundler: true,
-    });
+    expect(launchAppAsync).toBeCalledWith(
+      '/mock_binary',
+      expect.anything(),
+      {
+        device: { name: 'mock', udid: '123' },
+        isSimulator: true,
+        shouldStartBundler: true,
+      },
+      undefined
+    );
 
     expect(logProjectLogsLocation).toBeCalled();
   });
@@ -115,7 +130,16 @@ describe(resolveOptionsAsync, () => {
     });
     jest.mocked(isSimulatorDevice).mockReturnValueOnce(false);
     mockPlatform('darwin');
-    vol.fromJSON(rnFixture, '/');
+    vol.fromJSON(
+      {
+        ...rnFixture,
+        '/package.json': JSON.stringify({}),
+        'node_modules/expo/package.json': JSON.stringify({
+          version: '53.0.0',
+        }),
+      },
+      '/'
+    );
 
     await runIosAsync('/', { device: '00008101-001964A22629003A' });
 
@@ -139,18 +163,23 @@ describe(resolveOptionsAsync, () => {
       xcodeProject: { isWorkspace: false, name: '/ios/ReactNativeProject.xcodeproj' },
     });
 
-    expect(launchAppAsync).toBeCalledWith('/mock_binary', expect.anything(), {
-      device: {
-        deviceType: 'device',
-        model: 'iPhone13,4',
-        name: "Evan's phone",
-        osVersion: '15.4.1',
-        udid: '00008101-001964A22629003A',
-        connectionType: 'USB',
+    expect(launchAppAsync).toBeCalledWith(
+      '/mock_binary',
+      expect.anything(),
+      {
+        device: {
+          deviceType: 'device',
+          model: 'iPhone13,4',
+          name: "Evan's phone",
+          osVersion: '15.4.1',
+          udid: '00008101-001964A22629003A',
+          connectionType: 'USB',
+        },
+        isSimulator: false,
+        shouldStartBundler: true,
       },
-      isSimulator: false,
-      shouldStartBundler: true,
-    });
+      undefined
+    );
 
     expect(logProjectLogsLocation).toBeCalled();
   });

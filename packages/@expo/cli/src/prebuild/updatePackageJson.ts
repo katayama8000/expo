@@ -66,9 +66,9 @@ export async function updatePackageJSONAsync(
  * 3. Update `package.json` `main`.
  *
  * @param projectRoot The root directory of the project.
- * @param props.templatePkg Template project package.json as JSON.
- * @param props.pkg Current package.json as JSON.
- * @param props.skipDependencyUpdate Array of dependencies to skip updating.
+ * @param templatePkg Template project package.json as JSON.
+ * @param pkg Current package.json as JSON.
+ * @param skipDependencyUpdate Array of dependencies to skip updating.
  * @returns
  */
 function modifyPackageJson(
@@ -144,49 +144,55 @@ export function updatePkgDependencies(
     'react-native',
   ].filter((depKey) => !!defaultDependencies[depKey]);
 
-  const symlinkedPackages: string[] = [];
-  const nonRecommendedPackages: string[] = [];
+  const symlinkedPackages: [string, string][] = [];
+  const nonRecommendedPackages: [string, string][] = [];
 
-  for (const dependenciesKey of requiredDependencies) {
+  for (const dependencyKey of requiredDependencies) {
     // If the local package.json defined the dependency that we want to overwrite...
-    if (pkg.dependencies?.[dependenciesKey]) {
+    if (pkg.dependencies?.[dependencyKey]) {
       // Then ensure it isn't symlinked (i.e. the user has a custom version in their yarn workspace).
-      if (isModuleSymlinked(projectRoot, { moduleId: dependenciesKey, isSilent: true })) {
+      if (isModuleSymlinked(projectRoot, { moduleId: dependencyKey, isSilent: true })) {
         // If the package is in the project's package.json and it's symlinked, then skip overwriting it.
-        symlinkedPackages.push(dependenciesKey);
+        symlinkedPackages.push([
+          `${dependencyKey}`,
+          `${dependencyKey}@${defaultDependencies[dependencyKey]}`,
+        ]);
         continue;
       }
 
       // Do not modify manually skipped dependencies
-      if (skipDependencyUpdate.includes(dependenciesKey)) {
+      if (skipDependencyUpdate.includes(dependencyKey)) {
         continue;
       }
 
       // Warn users for outdated dependencies when prebuilding
       const hasRecommendedVersion = versionRangesIntersect(
-        pkg.dependencies[dependenciesKey],
-        String(defaultDependencies[dependenciesKey])
+        pkg.dependencies[dependencyKey],
+        String(defaultDependencies[dependencyKey])
       );
       if (!hasRecommendedVersion) {
-        nonRecommendedPackages.push(`${dependenciesKey}@${defaultDependencies[dependenciesKey]}`);
+        nonRecommendedPackages.push([
+          `${dependencyKey}@${pkg.dependencies[dependencyKey]}`,
+          `${dependencyKey}@${defaultDependencies[dependencyKey]}`,
+        ]);
       }
     }
   }
 
   if (symlinkedPackages.length) {
-    Log.log(
-      `\u203A Using symlinked ${symlinkedPackages
-        .map((pkg) => chalk.bold(pkg))
-        .join(', ')} instead of recommended version(s).`
-    );
+    symlinkedPackages.forEach(([current, recommended]) => {
+      Log.log(
+        `\u203A Using symlinked ${chalk.bold(current)} instead of recommended ${chalk.bold(recommended)}.`
+      );
+    });
   }
 
   if (nonRecommendedPackages.length) {
-    Log.warn(
-      `\u203A Using current versions instead of recommended ${nonRecommendedPackages
-        .map((pkg) => chalk.bold(pkg))
-        .join(', ')}.`
-    );
+    nonRecommendedPackages.forEach(([current, recommended]) => {
+      Log.warn(
+        `\u203A Using ${chalk.bold(current)} instead of recommended ${chalk.bold(recommended)}.`
+      );
+    });
   }
 
   // Only change the dependencies if the normalized hash changes, this helps to reduce meaningless changes.
@@ -239,19 +245,27 @@ export function createDependenciesMap(dependencies: any): DependenciesMap {
 }
 
 /**
- * Update package.json scripts - `npm start` should default to `expo
- * start --dev-client` rather than `expo start` after prebuilding, for example.
+ * Updates the package.json scripts for prebuild if the scripts match
+ * the default values used in project templates.
  */
-function updatePkgScripts({ pkg }: { pkg: PackageJSONConfig }) {
+export function updatePkgScripts({ pkg }: { pkg: PackageJSONConfig }) {
   let hasChanged = false;
   if (!pkg.scripts) {
     pkg.scripts = {};
   }
-  if (!pkg.scripts.android?.includes('run')) {
+  if (
+    !pkg.scripts.android ||
+    pkg.scripts.android === 'expo start --android' ||
+    pkg.scripts.android === 'react-native run-android'
+  ) {
     pkg.scripts.android = 'expo run:android';
     hasChanged = true;
   }
-  if (!pkg.scripts.ios?.includes('run')) {
+  if (
+    !pkg.scripts.ios ||
+    pkg.scripts.ios === 'expo start --ios' ||
+    pkg.scripts.ios === 'react-native run-ios'
+  ) {
     pkg.scripts.ios = 'expo run:ios';
     hasChanged = true;
   }

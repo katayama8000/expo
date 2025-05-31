@@ -7,6 +7,10 @@ const ExponentGLObjectManager = requireNativeModule('ExponentGLObjectManager');
 const { ExponentGLViewManager } = NativeModulesProxy;
 const NativeView = requireNativeViewManager('ExponentGLView');
 const workletContextManager = createWorkletContextManager();
+export function getWorkletContext(contextId) {
+    'worklet';
+    return workletContextManager.getContext(contextId);
+}
 // @needsAudit
 /**
  * A View that acts as an OpenGL ES render target. On mounting, an OpenGL ES context is created.
@@ -50,12 +54,15 @@ export class GLView extends React.Component {
         const exglCtxId = getContextId(exgl);
         return ExponentGLObjectManager.takeSnapshotAsync(exglCtxId, options);
     }
+    /**
+     * This method doesn't work inside of the worklets with new reanimated versions.
+     * @deprecated Use `getWorkletContext` from the global scope instead.
+     */
     static getWorkletContext = workletContextManager.getContext;
     nativeRef = null;
     exglCtxId;
     render() {
-        const { onContextCreate, // eslint-disable-line no-unused-vars
-        msaaSamples, enableExperimentalWorkletSupport, ...viewProps } = this.props;
+        const { onContextCreate, msaaSamples, enableExperimentalWorkletSupport, ...viewProps } = this.props;
         return (<View {...viewProps}>
         <NativeView ref={this._setNativeRef} style={{
                 flex: 1,

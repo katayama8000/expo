@@ -11,7 +11,15 @@ import {
   TerminalReportableEvent,
 } from './TerminalReporter.types';
 import { NODE_STDLIB_MODULES } from './externals';
+import { env } from '../../../utils/env';
 import { learnMore } from '../../../utils/link';
+import {
+  logLikeMetro,
+  maybeSymbolicateAndFormatReactErrorLogAsync,
+  parseErrorStringToObject,
+} from '../serverLogLikeMetro';
+
+const debug = require('debug')('expo:metro:logger') as typeof console.log;
 
 const MAX_PROGRESS_BAR_CHAR_WIDTH = 16;
 const DARK_BLOCK_CHAR = '\u2593';
@@ -28,9 +36,83 @@ export class MetroTerminalReporter extends TerminalReporter {
     super(terminal);
   }
 
+  _log(event: TerminalReportableEvent): void {
+    switch (event.type) {
+      case 'unstable_server_log':
+        if (typeof event.data?.[0] === 'string') {
+          const message = event.data[0];
+          if (message.match(/JavaScript logs have moved/)) {
+            // Hide this very loud message from upstream React Native in favor of the note in the terminal UI:
+            // The "› Press j │ open debugger"
+
+            // logger?.info(
+            //   '\u001B[1m\u001B[7m💡 JavaScript logs have moved!\u001B[22m They can now be ' +
+            //     'viewed in React Native DevTools. Tip: Type \u001B[1mj\u001B[22m in ' +
+            //     'the terminal to open (requires Google Chrome or Microsoft Edge).' +
+            //     '\u001B[27m',
+            // );
+            return;
+          }
+
+          if (!env.EXPO_DEBUG) {
+            // In the context of developing an iOS app or website, the MetroInspectorProxy "connection" logs are very confusing.
+            // Here we'll hide them behind EXPO_DEBUG or DEBUG=expo:*. In the future we can reformat them to clearly indicate that the "Connection" is regarding the debugger.
+            // These logs are also confusing because they can say "connection established" even when the debugger is not in a usable state. Really they belong in a UI or behind some sort of debug logging.
+            if (message.match(/Connection (closed|established|failed|terminated)/i)) {
+              // Skip logging.
+              return;
+            }
+          }
+        }
+        break;
+      case 'client_log': {
+        if (this.shouldFilterClientLog(event)) {
+          return;
+        }
+        const { level } = event;
+
+        if (!level) {
+          break;
+        }
+
+        const mode = event.mode === 'NOBRIDGE' || event.mode === 'BRIDGE' ? '' : (event.mode ?? '');
+        // @ts-expect-error
+        if (level === 'warn' || level === 'error') {
+          // Quick check to see if an unsymbolicated stack is being logged.
+          const msg = event.data.join('\n');
+          if (msg.includes('.bundle//&platform=')) {
+            const parsed = parseErrorStringToObject(msg);
+
+            if (parsed) {
+              maybeSymbolicateAndFormatReactErrorLogAsync(this.projectRoot, level, parsed)
+                .then((res) => {
+                  // Overwrite the Metro terminal logging so we can improve the warnings, symbolicate stacks, and inject extra info.
+                  logLikeMetro(this.terminal.log.bind(this.terminal), level, mode, res);
+                })
+                .catch((e) => {
+                  // Fallback on the original error message if we can't symbolicate the stack.
+                  debug('Error formatting stack', e);
+
+                  // Overwrite the Metro terminal logging so we can improve the warnings, symbolicate stacks, and inject extra info.
+                  logLikeMetro(this.terminal.log.bind(this.terminal), level, mode, ...event.data);
+                });
+
+              return;
+            }
+          }
+        }
+
+        // Overwrite the Metro terminal logging so we can improve the warnings, symbolicate stacks, and inject extra info.
+        logLikeMetro(this.terminal.log.bind(this.terminal), level, mode, ...event.data);
+        return;
+      }
+    }
+    return super._log(event);
+  }
+
   // Used for testing
-  _getElapsedTime(startTime: number): number {
-    return Date.now() - startTime;
+  _getElapsedTime(startTime: bigint): bigint {
+    return process.hrtime.bigint() - startTime;
   }
   /**
    * Extends the bundle progress to include the current platform that we're bundling.
@@ -42,9 +124,23 @@ export class MetroTerminalReporter extends TerminalReporter {
     const platform = env || getPlatformTagForBuildDetails(progress.bundleDetails);
     const inProgress = phase === 'in_progress';
 
-    const localPath = progress.bundleDetails.entryFile.startsWith(path.sep)
-      ? path.relative(this.projectRoot, progress.bundleDetails.entryFile)
-      : progress.bundleDetails.entryFile;
+    let localPath: string;
+
+    if (
+      typeof progress.bundleDetails?.customTransformOptions?.dom === 'string' &&
+      progress.bundleDetails.customTransformOptions.dom.includes(path.sep)
+    ) {
+      // Because we use a generated entry file for DOM components, we need to adjust the logging path so it
+      // shows a unique path for each component.
+      // Here, we take the relative import path and remove all the starting slashes.
+      localPath = progress.bundleDetails.customTransformOptions.dom.replace(/^(\.?\.[\\/])+/, '');
+    } else {
+      const inputFile = progress.bundleDetails.entryFile;
+
+      localPath = path.isAbsolute(inputFile)
+        ? path.relative(this.projectRoot, inputFile)
+        : inputFile;
+    }
 
     if (!inProgress) {
       const status = phase === 'done' ? `Bundled ` : `Bundling failed `;
@@ -52,7 +148,22 @@ export class MetroTerminalReporter extends TerminalReporter {
 
       const startTime = this._bundleTimers.get(progress.bundleDetails.buildID!);
 
-      const time = startTime != null ? chalk.dim(this._getElapsedTime(startTime) + 'ms') : '';
+      let time: string = '';
+
+      if (startTime != null) {
+        const elapsed: bigint = this._getElapsedTime(startTime);
+        const micro = Number(elapsed) / 1000;
+        const converted = Number(elapsed) / 1e6;
+        // If the milliseconds are < 0.5 then it will display as 0, so we display in microseconds.
+        if (converted <= 0.5) {
+          const tenthFractionOfMicro = ((micro * 10) / 1000).toFixed(0);
+          // Format as microseconds to nearest tenth
+          time = chalk.cyan.bold(`0.${tenthFractionOfMicro}ms`);
+        } else {
+          time = chalk.dim(converted.toFixed(0) + 'ms');
+        }
+      }
+
       // iOS Bundled 150ms
       const plural = progress.totalFileCount === 1 ? '' : 's';
       return (
@@ -77,7 +188,7 @@ export class MetroTerminalReporter extends TerminalReporter {
 
     return (
       platform +
-      chalk.reset.dim(`${path.dirname(localPath)}/`) +
+      chalk.reset.dim(`${path.dirname(localPath)}${path.sep}`) +
       chalk.bold(path.basename(localPath)) +
       ' ' +
       _progress
@@ -86,14 +197,10 @@ export class MetroTerminalReporter extends TerminalReporter {
 
   _logInitializing(port: number, hasReducedPerformance: boolean): void {
     // Don't print a giant logo...
-    this.terminal.log('Starting Metro Bundler');
+    this.terminal.log(chalk.dim('Starting Metro Bundler'));
   }
 
-  shouldFilterClientLog(event: {
-    type: 'client_log';
-    level: 'trace' | 'info' | 'warn' | 'log' | 'group' | 'groupCollapsed' | 'groupEnd' | 'debug';
-    data: unknown[];
-  }): boolean {
+  shouldFilterClientLog(event: { type: 'client_log'; data: unknown[] }): boolean {
     return isAppRegistryStartupMessage(event.data);
   }
 
@@ -118,7 +225,7 @@ export class MetroTerminalReporter extends TerminalReporter {
         chalk.red(
           [
             'Metro is operating with reduced performance.',
-            'Please fix the problem above and restart Metro.',
+            'Fix the problem above and restart Metro.',
           ].join('\n')
         )
       );
@@ -247,6 +354,13 @@ function getEnvironmentForBuildDetails(bundleDetails?: BundleDetails | null): st
     return chalk.bold('λ') + ' ';
   } else if (env === 'react-server') {
     return chalk.bold(`RSC(${getPlatformTagForBuildDetails(bundleDetails).trim()})`) + ' ';
+  }
+
+  if (
+    bundleDetails?.customTransformOptions?.dom &&
+    typeof bundleDetails?.customTransformOptions?.dom === 'string'
+  ) {
+    return chalk.bold(`DOM`) + ' ';
   }
 
   return '';

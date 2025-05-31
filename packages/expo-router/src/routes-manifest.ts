@@ -1,24 +1,30 @@
 // This file runs in Node.js environments.
 // no relative imports
-import { getRoutes } from './getRoutes';
+import { type Options, getRoutes } from './getRoutesSSR';
 import { getServerManifest } from './getServerManifest';
-import { RequireContext } from './types';
+import { type RequireContext } from './types';
+
+export { Options };
 
 export type RouteInfo<TRegex = string> = {
   file: string;
   page: string;
   namedRegex: TRegex;
   routeKeys: Record<string, string>;
+  permanent?: boolean;
+  methods?: string[];
 };
 
 export type ExpoRoutesManifestV1<TRegex = string> = {
   apiRoutes: RouteInfo<TRegex>[];
   htmlRoutes: RouteInfo<TRegex>[];
   notFoundRoutes: RouteInfo<TRegex>[];
+  redirects: RouteInfo<TRegex>[];
+  rewrites: RouteInfo<TRegex>[];
 };
 
 function createMockContextModule(map: string[] = []) {
-  const contextModule = (key) => ({ default() {} });
+  const contextModule = (_key: string) => ({ default() {} });
 
   Object.defineProperty(contextModule, 'keys', {
     value: () => map,
@@ -27,12 +33,18 @@ function createMockContextModule(map: string[] = []) {
   return contextModule as RequireContext;
 }
 
-export function createRoutesManifest(paths: string[]): ExpoRoutesManifestV1 | null {
+export function createRoutesManifest(
+  paths: string[],
+  options: Options
+): ExpoRoutesManifestV1 | null {
   // TODO: Drop this part for Node.js
   const routeTree = getRoutes(createMockContextModule(paths), {
+    ...options,
     preserveApiRoutes: true,
+    preserveRedirectAndRewrites: true,
     ignoreRequireErrors: true,
     ignoreEntryPoints: true,
+    platform: 'web',
   });
 
   if (!routeTree) {

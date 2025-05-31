@@ -1,37 +1,16 @@
 // Copyright 2018-present 650 Industries. All rights reserved.
 
 import ExpoModulesCore
-import EXDevMenu
 import EXUpdatesInterface
 
 @objc
 public class ExpoDevLauncherReactDelegateHandler: ExpoReactDelegateHandler, EXDevLauncherControllerDelegate {
-  @objc
-  public static var enableAutoSetup: Bool = true
-
+  private weak var reactNativeFactory: RCTReactNativeFactory?
   private weak var reactDelegate: ExpoReactDelegate?
   private var launchOptions: [AnyHashable: Any]?
   private var deferredRootView: EXDevLauncherDeferredRCTRootView?
   private var rootViewModuleName: String?
   private var rootViewInitialProperties: [AnyHashable: Any]?
-  static var shouldEnableAutoSetup: Bool = {
-    // if someone else has set this explicitly, use that value
-    if !enableAutoSetup {
-      return false
-    }
-
-    if !EXAppDefines.APP_DEBUG {
-      return false
-    }
-
-    // Backwards compatibility -- if the main AppDelegate has already set up expo-dev-launcher,
-    // we just skip in this case.
-    if EXDevLauncherController.sharedInstance().isStarted {
-      return false
-    }
-
-    return true
-  }()
 
   public override func createReactRootView(
     reactDelegate: ExpoReactDelegate,
@@ -39,12 +18,9 @@ public class ExpoDevLauncherReactDelegateHandler: ExpoReactDelegateHandler, EXDe
     initialProperties: [AnyHashable: Any]?,
     launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> UIView? {
-    if !ExpoDevLauncherReactDelegateHandler.shouldEnableAutoSetup {
+    if !EXAppDefines.APP_DEBUG {
       return nil
     }
-
-    // DevLauncherController will handle dev menu configuration, so dev menu auto-setup is not needed
-    ExpoDevMenuReactDelegateHandler.enableAutoSetup = false
 
     self.reactDelegate = reactDelegate
     self.launchOptions = launchOptions
@@ -61,20 +37,40 @@ public class ExpoDevLauncherReactDelegateHandler: ExpoReactDelegateHandler, EXDe
     return self.deferredRootView
   }
 
+  @objc
+  public func isReactInstanceValid() -> Bool {
+    return self.reactNativeFactory?.rootViewFactory.value(forKey: "reactHost") != nil
+  }
+
+  @objc
+  public func destroyReactInstance() {
+    self.reactNativeFactory?.rootViewFactory.setValue(nil, forKey: "reactHost")
+  }
+
   // MARK: EXDevelopmentClientControllerDelegate implementations
 
   public func devLauncherController(_ developmentClientController: EXDevLauncherController, didStartWithSuccess success: Bool) {
-    developmentClientController.appBridge = RCTBridge.current()
-
-    guard let rctAppDelegate = (UIApplication.shared.delegate as? RCTAppDelegate) else {
-      fatalError("The `UIApplication.shared.delegate` is not a `RCTAppDelegate` instance.")
+    guard let appDelegate = (UIApplication.shared.delegate as? (any ReactNativeFactoryProvider)) ??
+      ((UIApplication.shared.delegate as? NSObject)?.value(forKey: "_expoAppDelegate") as? (any ReactNativeFactoryProvider)) else {
+      fatalError("`UIApplication.shared.delegate` must be an `ExpoAppDelegate` or `EXAppDelegateWrapper`")
     }
-    let rootView = rctAppDelegate.recreateRootView(
+    self.reactNativeFactory = appDelegate.factory as? RCTReactNativeFactory
+
+    // Reset rctAppDelegate so we can relaunch the app
+    if self.reactNativeFactory?.delegate?.newArchEnabled() ?? false {
+      self.reactNativeFactory?.rootViewFactory.setValue(nil, forKey: "_reactHost")
+    } else {
+      self.reactNativeFactory?.bridge = nil
+      self.reactNativeFactory?.rootViewFactory.bridge = nil
+    }
+
+    let rootView = appDelegate.recreateRootView(
       withBundleURL: developmentClientController.sourceUrl(),
       moduleName: self.rootViewModuleName,
       initialProps: self.rootViewInitialProperties,
-      launchOptions: self.launchOptions
+      launchOptions: developmentClientController.getLaunchOptions()
     )
+    developmentClientController.appBridge = RCTBridge.current()
     rootView.backgroundColor = self.deferredRootView?.backgroundColor ?? UIColor.white
     let window = getWindow()
 

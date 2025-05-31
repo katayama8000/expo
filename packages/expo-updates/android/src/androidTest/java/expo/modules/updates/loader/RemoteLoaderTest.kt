@@ -13,6 +13,7 @@ import expo.modules.updates.codesigning.*
 import expo.modules.updates.db.enums.UpdateStatus
 import expo.modules.updates.loader.FileDownloader.AssetDownloadCallback
 import expo.modules.updates.loader.Loader.LoaderCallback
+import expo.modules.updates.logging.UpdatesLogger
 import expo.modules.updates.manifest.ExpoUpdatesUpdate
 import expo.modules.updates.manifest.Update
 import io.mockk.every
@@ -32,6 +33,7 @@ import java.util.*
 class RemoteLoaderTest {
   private lateinit var db: UpdatesDatabase
   private lateinit var configuration: UpdatesConfiguration
+  private lateinit var logger: UpdatesLogger
   private lateinit var manifest: Update
   private lateinit var loader: RemoteLoader
   private lateinit var mockLoaderFiles: LoaderFiles
@@ -47,12 +49,14 @@ class RemoteLoaderTest {
     )
     configuration = UpdatesConfiguration(null, configMap)
     val context = InstrumentationRegistry.getInstrumentation().targetContext
+    logger = UpdatesLogger(context.filesDir)
     db = Room.inMemoryDatabaseBuilder(context, UpdatesDatabase::class.java).build()
     mockLoaderFiles = mockk(relaxed = true)
     mockFileDownloader = mockk()
     loader = RemoteLoader(
       context,
       configuration,
+      logger,
       db,
       mockFileDownloader,
       File("testDirectory"),
@@ -63,8 +67,8 @@ class RemoteLoaderTest {
     val manifestString = CertificateFixtures.testExpoUpdatesManifestBody
     manifest = ExpoUpdatesUpdate.fromExpoUpdatesManifest(ExpoUpdatesManifest(JSONObject(manifestString)), null, configuration)
 
-    every { mockFileDownloader.downloadRemoteUpdate(any(), any(), any()) } answers {
-      val callback = arg<FileDownloader.RemoteUpdateDownloadCallback>(2)
+    every { mockFileDownloader.downloadRemoteUpdate(any(), any()) } answers {
+      val callback = arg<FileDownloader.RemoteUpdateDownloadCallback>(1)
       callback.onSuccess(
         UpdateResponse(
           responseHeaderData = null,
@@ -123,13 +127,13 @@ class RemoteLoaderTest {
   @Test
   fun testRemoteLoader_AssetExists_BothDbAndDisk() {
     // return true when asked if file 54da1e9816c77e30ebc5920e256736f2 exists on disk
-    every { mockLoaderFiles.fileExists(any()) } answers {
-      firstArg<File>().toString().contains("489ea2f19fa850b65653ab445637a181")
+    every { mockLoaderFiles.fileExists(any(), any(), any()) } answers {
+      thirdArg<String>().contains("489ea2f19fa850b65653ab445637a181")
     }
 
     val existingAsset = AssetEntity("489ea2f19fa850b65653ab445637a181.jpg", ".jpg")
     existingAsset.relativePath = "489ea2f19fa850b65653ab445637a181.jpg"
-    db.assetDao()._insertAsset(existingAsset)
+    db.assetDao().insertAssetForTest(existingAsset)
     loader.start(mockCallback)
 
     verify { mockCallback.onSuccess(any()) }
@@ -151,12 +155,12 @@ class RemoteLoaderTest {
   @Test
   fun testRemoteLoader_AssetExists_DbOnly() {
     // return false when asked if file 489ea2f19fa850b65653ab445637a181 exists on disk
-    every { mockLoaderFiles.fileExists(any()) } returns false
+    every { mockLoaderFiles.fileExists(any(), any(), any()) } returns false
 
     val existingAsset = AssetEntity("489ea2f19fa850b65653ab445637a181.jpg", ".jpg")
     existingAsset.relativePath = "489ea2f19fa850b65653ab445637a181.jpg"
     existingAsset.url = Uri.parse("http://example.com")
-    db.assetDao()._insertAsset(existingAsset)
+    db.assetDao().insertAssetForTest(existingAsset)
     loader.start(mockCallback)
 
     verify { mockCallback.onSuccess(any()) }
@@ -256,8 +260,8 @@ class RemoteLoaderTest {
       "{\"metadata\":{},\"runtimeVersion\":\"1\",\"id\":\"0eef8214-4833-4089-9dff-b4138a14f196\",\"createdAt\":\"2020-11-11T00:17:54.797Z\",\"launchAsset\":{\"url\":\"https://url.to/bundle.js\",\"contentType\":\"application/javascript\"},\"extra\":{\"expoGo\":{\"developer\":{\"tool\":\"expo-cli\",\"projectRoot\":\"/Users/eric/expo/updates-unit-test-template\"},\"packagerOpts\":{\"scheme\":null,\"hostType\":\"lan\",\"lanType\":\"ip\",\"dev\":true,\"minify\":false,\"urlRandomness\":null,\"https\":false}}}}"
     manifest = ExpoUpdatesUpdate.fromExpoUpdatesManifest(ExpoUpdatesManifest(JSONObject(manifestString)), null, configuration)
 
-    every { mockFileDownloader.downloadRemoteUpdate(any(), any(), any()) } answers {
-      val callback = arg<FileDownloader.RemoteUpdateDownloadCallback>(2)
+    every { mockFileDownloader.downloadRemoteUpdate(any(), any()) } answers {
+      val callback = arg<FileDownloader.RemoteUpdateDownloadCallback>(1)
       callback.onSuccess(
         UpdateResponse(
           responseHeaderData = null,
@@ -281,8 +285,8 @@ class RemoteLoaderTest {
   @Test
   fun testRemoteLoader_RollBackDirective() {
     val updateDirective = UpdateDirective.RollBackToEmbeddedUpdateDirective(commitTime = Date(), signingInfo = null)
-    every { mockFileDownloader.downloadRemoteUpdate(any(), any(), any()) } answers {
-      val callback = arg<FileDownloader.RemoteUpdateDownloadCallback>(2)
+    every { mockFileDownloader.downloadRemoteUpdate(any(), any()) } answers {
+      val callback = arg<FileDownloader.RemoteUpdateDownloadCallback>(1)
       callback.onSuccess(
         UpdateResponse(
           responseHeaderData = null,

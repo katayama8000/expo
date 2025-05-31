@@ -1,7 +1,8 @@
 const path = require('path');
 
-const roots = ['__mocks__', 'src'];
+const roots = ['__mocks__', 'src', 'metro-require'];
 
+/** @type {import('jest').Config} */
 module.exports = {
   watchPlugins: ['jest-watch-typeahead/filename', 'jest-watch-typeahead/testname'],
   projects: [
@@ -11,16 +12,8 @@ module.exports = {
       rootDir: path.resolve(__dirname),
       displayName: require('./package').name,
       roots,
-      setupFiles: ['<rootDir>/e2e/setup.ts'],
+      setupFiles: ['<rootDir>/jest.setup.ts'],
       clearMocks: true,
-    },
-    {
-      displayName: require('./package').name + '-types',
-      runner: 'jest-runner-tsd',
-      testRegex: '/__typetests__/.*(test|spec)\\.[jt]sx?$',
-      rootDir: path.resolve(__dirname),
-      roots,
-      globalSetup: '<rootDir>/src/start/server/type-generation/__typetests__/generateFixtures.ts',
     },
   ],
 };

@@ -6,6 +6,7 @@ import { checkEnvironmentTask } from './checkEnvironmentTask';
 import { checkPackageAccess } from './checkPackageAccess';
 import { loadRequestedParcels } from './loadRequestedParcels';
 import { packPackageToTarball } from './packPackageToTarball';
+import { publishAndroidArtifacts } from './publishAndroidPackages';
 import { publishPackages } from './publishPackages';
 import { updateBundledNativeModulesFile } from './updateBundledNativeModulesFile';
 import { updateModuleTemplate } from './updateModuleTemplate';
@@ -22,7 +23,9 @@ import {
 import { sdkVersionAsync } from '../../ProjectVersions';
 import { Task } from '../../TasksRunner';
 import { runWithSpinner } from '../../Utils';
+import { resolveReleaseTypeAndVersion } from '../helpers';
 import { CommandOptions, Parcel, TaskArgs } from '../types';
+import { updateAndroidProjects } from './updateAndroidProjects';
 
 const { cyan, green } = chalk;
 
@@ -48,13 +51,19 @@ export const prepareCanaries = new Task<TaskArgs>(
     const canarySuffix = await getCurrentCanaryVersionSuffix();
     const nextSdkVersion = await getNextSdkVersion();
 
-    for (const { pkg, state, pkgView } of parcels) {
+    for (const parcel of parcels) {
+      const { pkg, state, pkgView } = parcel;
       const baseVersion = SDK_CONSTRAINED_PACKAGES.includes(pkg.packageName)
         ? nextSdkVersion
-        : '0.0.1';
+        : resolveReleaseTypeAndVersion(parcel, options);
+
+      // Strip any pre-release tag from the baseVersion
+      // For example, convert "5.0.0-rc.0" or "5.0.0-preview.0" to "5.0.0"
+      // This is to ensure we don't stack the canary suffix on top of another
+      const cleanBaseVersion = semver.coerce(baseVersion)?.version ?? baseVersion;
 
       state.releaseVersion = findNextAvailableCanaryVersion(
-        `${baseVersion}-${canarySuffix}`,
+        `${cleanBaseVersion}-${canarySuffix}`,
         pkgView?.versions ?? []
       );
     }
@@ -78,7 +87,7 @@ const publishCanaryProjectTemplates = new Task<TaskArgs>(
         const expoVersion = await sdkVersionAsync();
         const dependenciesToUpdate = {
           ...bundledNativeModules,
-          expo: `~${expoVersion}`,
+          expo: options.canary ? expoVersion : `~${expoVersion}`,
         };
 
         for (const template of templates) {
@@ -134,6 +143,8 @@ export const cleanWorkingTree = new Task<TaskArgs>(
             'packages/**/package.json',
             'packages/expo-module-template/$package.json',
             'packages/expo/bundledNativeModules.json',
+            'packages/**/expo-module.config.json',
+            'packages/**/build.gradle',
             'templates/*/package.json',
           ],
         });
@@ -142,7 +153,7 @@ export const cleanWorkingTree = new Task<TaskArgs>(
         await Git.cleanAsync({
           recursive: true,
           force: true,
-          paths: ['packages/**/*.tgz'],
+          paths: ['packages/**/*.tgz', 'packages/**/local-maven-repo/**'],
         });
       },
       'Cleaned up the working tree'
@@ -165,6 +176,8 @@ export const publishCanaryPipeline = new Task<TaskArgs>(
       updateBundledNativeModulesFile,
       updateModuleTemplate,
       updateWorkspaceProjects,
+      updateAndroidProjects,
+      publishAndroidArtifacts,
       packPackageToTarball,
       publishPackages,
       publishCanaryProjectTemplates,

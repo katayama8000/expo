@@ -7,7 +7,7 @@ import { UpdatesScreen } from '../UpdatesScreen';
 
 jest.mock('graphql-request', () => {
   return {
-    GraphQLClient(apiUrl: string) {
+    GraphQLClient() {
       return {
         request: jest.fn(),
       };
@@ -62,7 +62,9 @@ describe('<UpdatesScreen />', () => {
       manifestPermalink: '123',
     };
 
-    mockUpdatesResponse([testUpdate]);
+    act(() => {
+      mockUpdatesResponse([testUpdate]);
+    });
 
     const { queryByText, getByText } = render(
       <UpdatesScreen
@@ -71,13 +73,11 @@ describe('<UpdatesScreen />', () => {
       />
     );
 
-    await act(async () => {
-      expect(queryByText(/hi joe/i)).toBe(null);
-      await waitFor(() => getByText(/hi joe/i));
+    expect(queryByText(/hi joe/i)).toBe(null);
+    await waitFor(() => getByText(/hi joe/i));
 
-      // TODO - mock launchUpdateAsync() and ensure it is called
-      fireEvent.press(getByText(/hi joe/i));
-    });
+    // TODO - mock launchUpdateAsync() and ensure it is called
+    fireEvent.press(getByText(/hi joe/i));
   });
 
   test('empty state', async () => {
@@ -85,7 +85,9 @@ describe('<UpdatesScreen />', () => {
       navigate: jest.fn(),
     };
 
-    mockUpdatesResponse([]);
+    act(() => {
+      mockUpdatesResponse([]);
+    });
 
     const { queryByText, getByText } = render(
       <UpdatesScreen
@@ -94,10 +96,8 @@ describe('<UpdatesScreen />', () => {
       />
     );
 
-    await act(async () => {
-      expect(queryByText(/no updates available/i)).toBe(null);
-      await waitFor(() => getByText(/no updates available/i));
-    });
+    expect(queryByText(/no updates available/i)).toBe(null);
+    await waitFor(() => getByText(/no updates available/i));
   });
 
   test.todo('show warning for incompatible update');

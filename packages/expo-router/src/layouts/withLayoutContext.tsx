@@ -1,13 +1,24 @@
 import { EventMapBase, NavigationState } from '@react-navigation/native';
-import React from 'react';
+import React, {
+  Children,
+  forwardRef,
+  ComponentProps,
+  ComponentType,
+  ForwardRefExoticComponent,
+  PropsWithoutRef,
+  ReactNode,
+  RefAttributes,
+  useMemo,
+} from 'react';
 
 import { useContextKey } from '../Route';
 import { PickPartial } from '../types';
 import { useSortedScreens, ScreenProps } from '../useScreens';
-import { Screen } from '../views/Screen';
+import { isProtectedReactElement, Protected } from '../views/Protected';
+import { isScreen, Screen } from '../views/Screen';
 
 export function useFilterScreenChildren(
-  children: React.ReactNode,
+  children: ReactNode,
   {
     isCustomNavigator,
     contextKey,
@@ -17,38 +28,53 @@ export function useFilterScreenChildren(
     contextKey?: string;
   } = {}
 ) {
-  return React.useMemo(() => {
+  return useMemo(() => {
     const customChildren: any[] = [];
-    const screens = React.Children.map(children, (child) => {
-      if (React.isValidElement(child) && child && child.type === Screen) {
-        if (!child.props.name) {
-          throw new Error(
-            `<Screen /> component in \`default export\` at \`app${contextKey}/_layout\` must have a \`name\` prop when used as a child of a Layout Route.`
-          );
-        }
-        if (process.env.NODE_ENV !== 'production') {
-          if (['children', 'component', 'getComponent'].some((key) => key in child.props)) {
-            throw new Error(
-              `<Screen /> component in \`default export\` at \`app${contextKey}/_layout\` must not have a \`children\`, \`component\`, or \`getComponent\` prop when used as a child of a Layout Route`
-            );
-          }
-        }
-        return child.props;
-      } else {
-        if (isCustomNavigator) {
-          customChildren.push(child);
+
+    const screens: (ScreenProps & { name: string })[] = [];
+    const protectedScreens = new Set<string>();
+
+    function flattenChild(child: ReactNode, exclude = false) {
+      if (isScreen(child, contextKey)) {
+        if (exclude) {
+          protectedScreens.add(child.props.name);
         } else {
-          console.warn(
-            `Layout children must be of type Screen, all other children are ignored. To use custom children, create a custom <Layout />. Update Layout Route at: "app${contextKey}/_layout"`
-          );
+          screens.push(child.props);
         }
+        return;
       }
-    });
+
+      if (isProtectedReactElement(child)) {
+        if (child.props.guard) {
+          Children.forEach(child.props.children, (protectedChild) => flattenChild(protectedChild));
+        } else {
+          Children.forEach(child.props.children, (protectedChild) => {
+            flattenChild(protectedChild, true);
+          });
+        }
+        return;
+      }
+
+      if (isCustomNavigator) {
+        customChildren.push(child);
+        return null;
+      }
+
+      console.warn(
+        `Layout children must be of type Screen, all other children are ignored. To use custom children, create a custom <Layout />. Update Layout Route at: "app${contextKey}/_layout"`
+      );
+
+      return null;
+    }
+
+    Children.forEach(children, (child) => flattenChild(child));
 
     // Add an assertion for development
     if (process.env.NODE_ENV !== 'production') {
       // Assert if names are not unique
-      const names = screens?.map((screen) => screen.name);
+      const names = screens?.map(
+        (screen) => screen && typeof screen === 'object' && 'name' in screen && screen.name
+      );
       if (names && new Set(names).size !== names.length) {
         throw new Error('Screen names must be unique: ' + names);
       }
@@ -57,56 +83,74 @@ export function useFilterScreenChildren(
     return {
       screens,
       children: customChildren,
+      protectedScreens,
     };
   }, [children]);
 }
 
-/** Return a navigator that automatically injects matched routes and renders nothing when there are no children. Return type with children prop optional */
+/**
+ * Returns a navigator that automatically injects matched routes and renders nothing when there are no children.
+ * Return type with `children` prop optional.
+ * 
+ * Enables use of other built-in React Navigation navigators and other navigators built with the React Navigation custom navigator API.
+ *
+ *  @example
+ * ```tsx app/_layout.tsx
+ * import { ParamListBase, TabNavigationState } from "@react-navigation/native";
+ * import {
+ *   createMaterialTopTabNavigator,
+ *   MaterialTopTabNavigationOptions,
+ *   MaterialTopTabNavigationEventMap,
+ * } from "@react-navigation/material-top-tabs";
+ * import { withLayoutContext } from "expo-router";
+ * 
+ * const MaterialTopTabs = createMaterialTopTabNavigator();
+ * 
+ * const ExpoRouterMaterialTopTabs = withLayoutContext<
+ *   MaterialTopTabNavigationOptions,
+ *   typeof MaterialTopTabs.Navigator,
+ *   TabNavigationState<ParamListBase>,
+ *   MaterialTopTabNavigationEventMap
+ * >(MaterialTopTabs.Navigator);
+
+ * export default function TabLayout() {
+ *   return <ExpoRouterMaterialTopTabs />;
+ * }
+ * ```
+ */
 export function withLayoutContext<
   TOptions extends object,
-  T extends React.ComponentType<any>,
-  State extends NavigationState,
-  EventMap extends EventMapBase,
->(
-  Nav: T,
-  processor?: (
-    options: ScreenProps<TOptions, State, EventMap>[]
-  ) => ScreenProps<TOptions, State, EventMap>[]
-): React.ForwardRefExoticComponent<
-  React.PropsWithoutRef<PickPartial<React.ComponentProps<T>, 'children'>> &
-    React.RefAttributes<unknown>
-> & {
-  Screen: (props: ScreenProps<TOptions, State, EventMap>) => null;
-} {
-  const Navigator = React.forwardRef(
-    (
-      { children: userDefinedChildren, ...props }: PickPartial<React.ComponentProps<T>, 'children'>,
-      ref
-    ) => {
+  T extends ComponentType<any>,
+  TState extends NavigationState,
+  TEventMap extends EventMapBase,
+>(Nav: T, processor?: (options: ScreenProps[]) => ScreenProps[]) {
+  return Object.assign(
+    forwardRef(({ children: userDefinedChildren, ...props }: any, ref) => {
       const contextKey = useContextKey();
 
-      const { screens } = useFilterScreenChildren(userDefinedChildren, {
+      const { screens, protectedScreens } = useFilterScreenChildren(userDefinedChildren, {
         contextKey,
       });
 
       const processed = processor ? processor(screens ?? []) : screens;
 
-      const sorted = useSortedScreens(processed ?? []);
+      const sorted = useSortedScreens(processed ?? [], protectedScreens);
 
       // Prevent throwing an error when there are no screens.
       if (!sorted.length) {
         return null;
       }
 
-      return (
-        // @ts-expect-error
-        <Nav {...props} id={contextKey} ref={ref} children={sorted} />
-      );
+      return <Nav {...props} id={contextKey} ref={ref} children={sorted} />;
+    }),
+    {
+      Screen,
+      Protected,
     }
-  );
-
-  // @ts-expect-error
-  Navigator.Screen = Screen;
-  // @ts-expect-error
-  return Navigator;
+  ) as ForwardRefExoticComponent<
+    PropsWithoutRef<PickPartial<ComponentProps<T>, 'children'>> & RefAttributes<unknown>
+  > & {
+    Screen: (props: ScreenProps<TOptions, TState, TEventMap>) => null;
+    Protected: typeof Protected;
+  };
 }

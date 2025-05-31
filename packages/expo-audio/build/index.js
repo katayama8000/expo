@@ -1,6 +1,6 @@
-import { useRef } from 'react';
-import AudioModule from './AudioModule';
-export function useAudioPlayer(source = null) {
-    return useRef(new AudioModule.AudioPlayer(source)).current;
-}
+export { PermissionStatus } from 'expo-modules-core';
+export * from './ExpoAudio';
+export * from './Audio.types';
+export * from './AudioModule.types';
+export * from './RecordingConstants';
 //# sourceMappingURL=index.js.map

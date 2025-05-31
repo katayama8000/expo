@@ -17,10 +17,10 @@ import com.facebook.react.ReactInstanceManager
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactRootView
 import com.facebook.react.bridge.ReactContext
-import com.facebook.react.config.ReactFeatureFlags
 import com.facebook.react.modules.core.PermissionListener
 import expo.modules.core.interfaces.ReactActivityLifecycleListener
 import expo.modules.kotlin.Utils
+import expo.modules.rncompatibility.ReactNativeFeatureFlags
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -61,6 +61,10 @@ class ReactActivityDelegateWrapper(
     return invokeDelegateMethod("createRootView")
   }
 
+  override fun getReactDelegate(): ReactDelegate? {
+    return invokeDelegateMethod("getReactDelegate")
+  }
+
   override fun getReactNativeHost(): ReactNativeHost {
     return _reactNativeHost
   }
@@ -89,9 +93,10 @@ class ReactActivityDelegateWrapper(
       mReactDelegate.isAccessible = true
       val reactDelegate = mReactDelegate[delegate] as ReactDelegate
 
-      dispatchWillCreateReactInstanceIfNeeded()
       reactDelegate.loadApp(appKey)
-      rootViewContainer.addView(reactDelegate.reactRootView, ViewGroup.LayoutParams.MATCH_PARENT)
+      val reactRootView = reactDelegate.reactRootView
+      (reactRootView?.parent as? ViewGroup)?.removeView(reactRootView)
+      rootViewContainer.addView(reactRootView, ViewGroup.LayoutParams.MATCH_PARENT)
       activity.setContentView(rootViewContainer)
       reactActivityLifecycleListeners.forEach { listener ->
         listener.onContentChanged(activity)
@@ -106,18 +111,18 @@ class ReactActivityDelegateWrapper(
       shouldEmitPendingResume = true
       delayLoadAppHandler.whenReady {
         Utils.assertMainThread()
-        dispatchWillCreateReactInstanceIfNeeded()
         invokeDelegateMethod<Unit, String?>("loadApp", arrayOf(String::class.java), arrayOf(appKey))
         reactActivityLifecycleListeners.forEach { listener ->
           listener.onContentChanged(activity)
         }
-        shouldEmitPendingResume = false
-        onResume()
+        if (shouldEmitPendingResume) {
+          shouldEmitPendingResume = false
+          onResume()
+        }
       }
       return
     }
 
-    dispatchWillCreateReactInstanceIfNeeded()
     invokeDelegateMethod<Unit, String?>("loadApp", arrayOf(String::class.java), arrayOf(appKey))
     reactActivityLifecycleListeners.forEach { listener ->
       listener.onContentChanged(activity)
@@ -147,7 +152,7 @@ class ReactActivityDelegateWrapper(
       // That's not ideal but works.
       val launchOptions = composeLaunchOptions()
       val reactDelegate: ReactDelegate
-      if (ReactFeatureFlags.enableBridgelessArchitecture) {
+      if (ReactNativeFeatureFlags.enableBridgelessArchitecture) {
         reactDelegate = ReactDelegate(
           plainActivity,
           reactHost,
@@ -190,9 +195,11 @@ class ReactActivityDelegateWrapper(
   }
 
   override fun onPause() {
-    // If app is stopped before delayed `loadApp`, we should cancel the pending resume
+    // If app is stopped before the delayed `loadApp`, we should cancel the pending resume
+    // and avoid propagating the pause event because the state was never resumed.
     if (shouldEmitPendingResume) {
       shouldEmitPendingResume = false
+      return
     }
     reactActivityLifecycleListeners.forEach { listener ->
       listener.onPause(activity)
@@ -200,10 +207,19 @@ class ReactActivityDelegateWrapper(
     return invokeDelegateMethod("onPause")
   }
 
+  override fun onUserLeaveHint() {
+    reactActivityLifecycleListeners.forEach { listener ->
+      listener.onUserLeaveHint(activity)
+    }
+    return invokeDelegateMethod("onUserLeaveHint")
+  }
+
   override fun onDestroy() {
-    // If app is stopped before delayed `loadApp`, we should cancel the pending resume
+    // If app is stopped before the delayed `loadApp`, we should cancel the pending resume
+    // and avoid propagating the destroy event because the state was never resumed.
     if (shouldEmitPendingResume) {
       shouldEmitPendingResume = false
+      return
     }
     reactActivityLifecycleListeners.forEach { listener ->
       listener.onDestroy(activity)
@@ -225,7 +241,7 @@ class ReactActivityDelegateWrapper(
      *
      * TODO (@bbarthec): fix it upstream?
      */
-    if (delegate.reactInstanceManager.currentReactContext == null) {
+    if (!ReactNativeFeatureFlags.enableBridgelessArchitecture && delegate.reactInstanceManager.currentReactContext == null) {
       val reactContextListener = object : ReactInstanceEventListener {
         override fun onReactContextInitialized(context: ReactContext) {
           delegate.reactInstanceManager.removeReactInstanceEventListener(this)
@@ -239,7 +255,11 @@ class ReactActivityDelegateWrapper(
   }
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-    return delegate.onKeyDown(keyCode, event)
+    // if any of the handlers return true, intentionally consume the event instead of passing it
+    // through to the delegate
+    return reactActivityHandlers
+      .map { it.onKeyDown(keyCode, event) }
+      .fold(false) { accu, current -> accu || current } || delegate.onKeyDown(keyCode, event)
   }
 
   override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
@@ -251,7 +271,11 @@ class ReactActivityDelegateWrapper(
   }
 
   override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
-    return delegate.onKeyLongPress(keyCode, event)
+    // if any of the handlers return true, intentionally consume the event instead of passing it
+    // through to the delegate
+    return reactActivityHandlers
+      .map { it.onKeyLongPress(keyCode, event) }
+      .fold(false) { accu, current -> accu || current } || delegate.onKeyLongPress(keyCode, event)
   }
 
   override fun onBackPressed(): Boolean {
@@ -330,15 +354,6 @@ class ReactActivityDelegateWrapper(
       methodMap[name] = method
     }
     return method!!.invoke(delegate, *args) as T
-  }
-
-  private fun dispatchWillCreateReactInstanceIfNeeded() {
-    if (_reactHost != null) {
-      val useDeveloperSupport = _reactNativeHost.useDeveloperSupport
-      (_reactNativeHost as? ReactNativeHostWrapper)?.reactNativeHostHandlers?.forEach {
-        it.onWillCreateReactInstance(useDeveloperSupport)
-      }
-    }
   }
 
   //endregion

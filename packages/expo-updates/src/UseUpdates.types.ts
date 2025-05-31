@@ -9,11 +9,12 @@ export type CurrentlyRunningInfo = {
    * The UUID that uniquely identifies the currently running update if `expo-updates` is enabled. The
    * UUID is represented in its canonical string form and will always use lowercase letters.
    * In development mode, or any other environment in which `expo-updates` is disabled, this value is undefined.
-   * @example xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   * @example
+   * `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`
    */
   updateId?: string;
   /**
-   * The channel name of the current build, if configured for use with EAS Update; undefined otherwise.
+   * The channel name of the current build, if configured for use with EAS Update, `undefined` otherwise.
    */
   channel?: string;
   /**
@@ -44,6 +45,10 @@ export type CurrentlyRunningInfo = {
    * what failed during initialization.
    */
   emergencyLaunchReason: string | null;
+  /**
+   * Number of milliseconds it took to launch.
+   */
+  launchDuration?: number;
   /**
    * If `expo-updates` is enabled, this is the
    * [manifest](https://docs.expo.dev/versions/latest/sdk/updates/#updatesmanifest) object for the update that's currently
@@ -79,7 +84,7 @@ export enum UpdateInfoType {
 /**
  * Structure representing a new update.
  */
-type UpdateInfoNew = {
+export type UpdateInfoNew = {
   /**
    * The type of update.
    */
@@ -88,7 +93,8 @@ type UpdateInfoNew = {
    * For updates of type `UpdateInfoType.NEW`, this is
    * a string that uniquely identifies the update. For the manifests used in the current Expo Updates protocol (including
    * EAS Update), this represents the update's UUID in its canonical string form and will always use lowercase letters.
-   * @example xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   * @example
+   * `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`
    */
   updateId: string;
   /**
@@ -106,13 +112,13 @@ type UpdateInfoNew = {
 /**
  * Structure representing a rollback directive.
  */
-type UpdateInfoRollback = {
+export type UpdateInfoRollback = {
   /**
    * The type of update.
    */
   type: UpdateInfoType.ROLLBACK;
   /**
-   * For updates of type `UpdateInfoType.ROLLBACK`, this is undefined.
+   * For updates of type `UpdateInfoType.ROLLBACK`, this is always set to `undefined`.
    */
   updateId: undefined;
   /**
@@ -121,7 +127,7 @@ type UpdateInfoRollback = {
    */
   createdAt: Date;
   /**
-   * For updates of type `UpdateInfoType.ROLLBACK`, this is undefined.
+   * For updates of type `UpdateInfoType.ROLLBACK`, this is always set to `undefined`.
    */
   manifest: undefined;
 };
@@ -132,7 +138,7 @@ type UpdateInfoRollback = {
 export type UpdateInfo = UpdateInfoNew | UpdateInfoRollback;
 
 /**
- * The structures and methods returned by `useUpdates()`.
+ * The type returned by [`useUpdates()`](#useupdates).
  */
 export type UseUpdatesReturnType = {
   /**
@@ -140,9 +146,13 @@ export type UseUpdatesReturnType = {
    */
   currentlyRunning: CurrentlyRunningInfo;
   /**
-   * If a new available update has been found, either by using checkForUpdate(),
-   * or by the `UpdateEvent` listener in `useUpdates()`,
-   * this will contain the information for that update.
+   * Whether the startup procedure is still running. This may happen if the fallbackToCacheTimeout is shorter than the time taken to
+   * fetch a new update during app launch.
+   */
+  isStartupProcedureRunning: boolean;
+  /**
+   * If a new available update has been found, either by using [`checkForUpdateAsync()`](#updatescheckforupdateasync),
+   * or by the `UpdateEvent` listener in `useUpdates()`, this will contain the information for that update.
    */
   availableUpdate?: UpdateInfo;
   /**
@@ -167,19 +177,23 @@ export type UseUpdatesReturnType = {
    */
   isDownloading: boolean;
   /**
-   * If an error is returned from either the startup check for updates, or a call to `checkForUpdateAsync()`,
+   * True if the app is currently in the process of restarting.
+   */
+  isRestarting: boolean;
+  /**
+   * Number of times the JS has been restarted (for example, by calling reloadAsync) since app cold start.
+   */
+  restartCount: number;
+  /**
+   * If an error is returned from either the startup check for updates, or a call to [`checkForUpdateAsync()`](#updatescheckforupdateasync),
    * the error description will appear here.
    */
   checkError?: Error;
   /**
-   * If an error is returned from either a startup update download, or a call to `fetchUpdateAsync()`,
+   * If an error is returned from either a startup update download, or a call to [`fetchUpdateAsync()`](#updatesfetchupdateasync),
    * the error description will appear here.
    */
   downloadError?: Error;
-  /**
-   * If an error occurs during initialization of `useUpdates()`, the error description will appear here.
-   */
-  initializationError?: Error;
   /**
    * A `Date` object representing the last time this client checked for an available update,
    * or `undefined` if no check has yet occurred since the app started. Does not persist across
